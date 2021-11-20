@@ -10,7 +10,7 @@ public class EC2Adapter {
     public EC2Adapter() {
     }
 
-    public String createEC2Instance(String name) {
+    public String createEC2Instance(String name, String userData) {
 
 
         String amiId = "ami-04ad2567c9e3d7893";
@@ -19,6 +19,7 @@ public class EC2Adapter {
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(1)
                 .minCount(1)
+                .userData(userData)
                 .build();
 
         RunInstancesResponse response = ec2.runInstances(runRequest);
