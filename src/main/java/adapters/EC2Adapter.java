@@ -3,6 +3,9 @@ package adapters;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class EC2Adapter {
 
     private Ec2Client ec2 = Ec2Client.create();
@@ -14,12 +17,17 @@ public class EC2Adapter {
 
 
         String amiId = "ami-04ad2567c9e3d7893";
+        List<String> securityGroupIds = new ArrayList();
+        securityGroupIds.add("sg-00327f5109f933ecf");
+
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
                 .instanceType(InstanceType.T2_MICRO)
                 .maxCount(1)
                 .minCount(1)
                 .userData(userData)
+                .keyName("multi-key")
+                .securityGroupIds(securityGroupIds)
                 .build();
 
         RunInstancesResponse response = ec2.runInstances(runRequest);
@@ -35,20 +43,10 @@ public class EC2Adapter {
                 .tags(tag)
                 .build();
 
-        try {
-            ec2.createTags(tagRequest);
-            System.out.printf(
-                    "Successfully started EC2 Instance %s based on AMI %s",
-                    instanceId, amiId);
+        ec2.createTags(tagRequest);
 
-            return instanceId;
+        return instanceId;
 
-        } catch (Ec2Exception e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
-        }
-
-        return "";
     }
 
     public void startInstance(String instanceId) {
@@ -58,7 +56,6 @@ public class EC2Adapter {
                 .build();
 
         ec2.startInstances(request);
-        System.out.printf("Successfully started instance %s", instanceId);
     }
 
     public void stopInstance(String instanceId) {
@@ -68,22 +65,31 @@ public class EC2Adapter {
                 .build();
 
         ec2.stopInstances(request);
-        System.out.printf("Successfully stopped instance %s", instanceId);
     }
 
     public void rebootEC2Instance(String instanceId) {
+        RebootInstancesRequest request = RebootInstancesRequest.builder()
+                .instanceIds(instanceId)
+                .build();
 
+        ec2.rebootInstances(request);
+    }
+
+    public List<Instance> describeEC2Instances() {
+        List<Instance> instances = new ArrayList<>();
+        DescribeInstancesResponse response = null;
+        Ec2Client ec2 = Ec2Client.create();
         try {
-            RebootInstancesRequest request = RebootInstancesRequest.builder()
-                    .instanceIds(instanceId)
-                    .build();
-
-            ec2.rebootInstances(request);
-            System.out.printf(
-                    "Successfully rebooted instance %s", instanceId);
-        } catch (Ec2Exception e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
-            System.exit(1);
+            DescribeInstancesRequest request = DescribeInstancesRequest.builder().maxResults(6).nextToken(null).build();
+            response = ec2.describeInstances(request);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
         }
+
+
+        for (Reservation res : response.reservations()) {
+            instances.addAll(res.instances());
+        }
+        return instances;
     }
 }
