@@ -1,8 +1,5 @@
-import adapters.EC2Adapter;
-import adapters.S3Adapter;
-import adapters.SQSAdapter;
 import org.apache.pdfbox.cos.COSDocument;
-import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.RandomAccessFile;
 import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -11,31 +8,18 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.tools.imageio.ImageIOUtil;
 import org.fit.pdfdom.PDFDomTree;
-import software.amazon.awssdk.services.sqs.model.Message;
 
 import javax.xml.parsers.ParserConfigurationException;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.List;
 
 
-public class WorekerMain {
+public class mockWorker {
+
     public static void main(String[] args) throws IOException, ParserConfigurationException {
-        EC2Adapter ec2Adapter = new EC2Adapter();
-        S3Adapter s3Adapter = new S3Adapter();
-        SQSAdapter sqsAdapter = new SQSAdapter();
-        List<Message> messages = sqsAdapter.retrieveMessage("queueUrl");
-        for (Message m : messages) {
-            String[] data = m.body().split(",");
-            try {
-                handleMessage(data[0], data[1]);
-            } catch (Exception e) {
-                //todo - If an exception occurs, then the worker should recover from it, send a message to the manager of the input message that caused the exception together with a short description of the exception, and continue working on the next message.
-            }
-
-        }
+        handleMessage("http://www.pdf995.com/samples/pdf.pdf", "ToHTML");
     }
 
     private static void saveFileFromUrlWithJavaIO(String fileName, String fileUrl)
@@ -62,21 +46,44 @@ public class WorekerMain {
         }
     }
 
+
+    /* private static void saveFileFromUrlWithJavaIO(String fileName, String fileUrl) {
+         try {
+             //String arg = args[0];
+             URL url = new URL(fileUrl);
+             //jpg
+             InputStream in = new BufferedInputStream(url.openStream());
+             ByteArrayOutputStream out = new ByteArrayOutputStream();
+             byte[] buf = new byte[131072];
+             int n = 0;
+             while (-1 != (n = in.read(buf))) {
+                 out.write(buf, 0, n);
+             }
+             out.close();
+             in.close();
+             byte[] response = out.toByteArray();
+             FileOutputStream fos = new FileOutputStream(fileName);
+             fos.write(response);
+             fos.close();
+         } catch (Exception e) {
+             e.printStackTrace();
+         }
+     }*/
     private static void handleMessage(String url, String action) throws IOException, ParserConfigurationException {
-        String dirName = "C:\\FileDownload";
-        saveFileFromUrlWithJavaIO(dirName + "\\downloadPDFFIle.pdf", url);
+        String dirName = "/Users/eladweinfeld/Desktop/testaws/pdfTOTest.pdf";
+        saveFileFromUrlWithJavaIO(dirName, url);
         switch (action) {
             case "ToImage":
-                toImage(dirName + "\\downloadPDFFIle.pdf");
+                toImage(dirName);
                 break;
             case "ToHTML":
-                toHTML(dirName + "\\downloadPDFFIle.pdf");
+                toHTML(dirName);
                 break;
             case "ToText":
-                toText(dirName + "\\downloadPDFFIle.pdf");
+                toText(dirName);
                 break;
             default:
-                //toDo - what to do if no good action -//toDo - what to do if no good action - need to If an exception occurs while performing an operation on a PDF file, or the PDF file is not available, then output line for this file will be: <operation>: input file <a short description of the exception>.
+                //toDo - what to do if no good action - need to If an exception occurs while performing an operation on a PDF file, or the PDF file is not available, then output line for this file will be: <operation>: input file <a short description of the exception>.
                 break;
         }
         //File f = new File(dirName + "\\downloadPDFFIle.pdf");//todo - delete the file
@@ -92,7 +99,7 @@ public class WorekerMain {
             BufferedImage bim = pdfRenderer.renderImageWithDPI(
                     page, 300, ImageType.RGB);
             ImageIOUtil.writeImage(
-                    bim, String.format("src/output/pdf-%d.%s", page + 1, "png"), 300);
+                    bim, String.format("src/main/java/pdf-%d.%s", page + 1, "png"), 300);
         }
         document.close();
     }
@@ -102,7 +109,7 @@ public class WorekerMain {
         PDPage page = pdf.getPage(0);
         PDDocument firstPage = new PDDocument();
         firstPage.addPage(page);
-        Writer output = new PrintWriter("src/output/pdf.html", "utf-8");
+        Writer output = new PrintWriter("src/main/java/pdf.html", "utf-8");
         new PDFDomTree().writeText(firstPage, output);
         output.close();
     }
@@ -110,7 +117,7 @@ public class WorekerMain {
     private static void toText(String fileName) throws IOException, ParserConfigurationException {
         File f = new File(fileName);
         String parsedText;
-        PDFParser parser = new PDFParser((RandomAccessRead) new RandomAccessFile(f, "r"));
+        PDFParser parser = new PDFParser(new RandomAccessFile(f, "r"));
         parser.parse();
         COSDocument cosDoc = parser.getDocument();
         PDFTextStripper pdfStripper = new PDFTextStripper();
@@ -119,7 +126,7 @@ public class WorekerMain {
         PDDocument firstPage = new PDDocument();
         firstPage.addPage(page);
         parsedText = pdfStripper.getText(firstPage);
-        PrintWriter pw = new PrintWriter("src/output/pdf.txt");
+        PrintWriter pw = new PrintWriter("src/main/java/pdf.txt");
         pw.print(parsedText);
         pw.close();
     }
