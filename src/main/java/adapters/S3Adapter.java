@@ -70,7 +70,6 @@ public class S3Adapter {
                 .bucket(bucketName)
                 .key(key)
                 .build();
-
         return s3.getObject(getObjectRequest);
     }
 

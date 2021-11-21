@@ -49,30 +49,36 @@ public class EC2Adapter {
 
     }
 
-    public void startInstance(String instanceId) {
+    public StartInstancesResponse startInstance(String instanceId) {
 
         StartInstancesRequest request = StartInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
 
-        ec2.startInstances(request);
+        return ec2.startInstances(request);
     }
 
-    public void stopInstance(String instanceId) {
+    public StopInstancesResponse stopInstance(String instanceId) {
 
         StopInstancesRequest request = StopInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
 
-        ec2.stopInstances(request);
+        return ec2.stopInstances(request);
     }
 
-    public void rebootEC2Instance(String instanceId) {
+    public RebootInstancesResponse rebootEC2Instance(String instanceId) {
         RebootInstancesRequest request = RebootInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
+        return ec2.rebootInstances(request);
+    }
 
-        ec2.rebootInstances(request);
+    public TerminateInstancesResponse terminateEC2Instance(String instanceId) {
+        TerminateInstancesRequest request = TerminateInstancesRequest.builder()
+                .instanceIds(instanceId)
+                .build();
+        return ec2.terminateInstances(request);
     }
 
     public List<Instance> describeEC2Instances() {
@@ -91,5 +97,6 @@ public class EC2Adapter {
             instances.addAll(res.instances());
         }
         return instances;
+
     }
 }

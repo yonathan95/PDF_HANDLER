@@ -43,7 +43,15 @@ public class SQSAdapter {
                 .queueUrl(queueUrl)
                 .maxNumberOfMessages(5)
                 .build();
-        List<Message> messages = sqsClient.receiveMessage(receiveMessageRequest).messages();
-        return messages;
+        return sqsClient.receiveMessage(receiveMessageRequest).messages();
     }
+
+    public List<Message> retrieveOneMessage(String queueUrl) {
+        ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder()
+                .queueUrl(queueUrl)
+                .maxNumberOfMessages(1)
+                .build();
+        return sqsClient.receiveMessage(receiveMessageRequest).messages();
+    }
+
 }
