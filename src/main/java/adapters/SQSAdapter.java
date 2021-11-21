@@ -31,11 +31,10 @@ public class SQSAdapter {
         return sqsClient.createQueue(createQueueRequest);
     }
 
-    public SendMessageResponse sendMessage(String queueUrl, String body, Integer delaySeconds) {
+    public SendMessageResponse sendMessage(String queueUrl, String body) {
         return sqsClient.sendMessage(SendMessageRequest.builder()
                 .queueUrl(queueUrl)
                 .messageBody(body)
-                .delaySeconds(delaySeconds)
                 .build());
     }
 

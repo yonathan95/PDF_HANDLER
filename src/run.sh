@@ -1,0 +1,13 @@
+#!/bin/bash
+sudo apt-get update
+
+#install java
+sudo yum install -y java-1.8.0-openjdk
+
+export AWS_ACCESS_KEY_ID=ASIAYVIKYYUP3QXMMN4F
+export AWS_SECRET_ACCESS_KEY=r/fzu2KkI43JTe49TNBsanT+TqeqRCUUIBe/NA5w
+export AWS_SESSION_TOKEN=FwoGZXIvYXdzEEkaDCWkbn0GLJckA4BKsiLGAU+t2DUyZkl1HJQQXSoxsFMaMNtOIejLZWdYt1hxV72rl0dffUx3Oind6gCOmjWQ54uzM03/yHFlMvxwfeCv1Tfk+DHeh5dQi6FyyoixBBbKtdo5p8mBUGG+OdqrcQwUs7BI6fabdg3jm4MaPYxTlQh2Cs9NbKbrn28l2g3U69kVfn/Ep5SS/1YmKlEGrmxXTHgf8zlAY7D4gn6U8+pMI86P0e5JuhYgbbYHKcgtRhAoLuLGf/djiUF/y01Pav7sUNDCl8BmNSjGpeSMBjItaPkAnrA6YAWcPU4XPt4Z4WCyLmmadcjfER4RmeGCN9lvYjgZay8sZDr01Wpr
+export AWS_DEFAULT_REGION=us-west-2
+aws s3 cp s3://working-bucket1637422184418/inputFile.txt .
+java -version
+#java -jar <file_name>.jar arg1 arg2 arg3
