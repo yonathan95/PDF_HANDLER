@@ -22,23 +22,43 @@ import java.util.List;
 
 
 public class WorekerMain {
+
+    public static final int MALFORMED_URL_EXCEPTION = 1;
+    public static final int IO_Exception = 2;
+    public static final int SUCCESS_TO_DOWONLOAD = 3;
+
+    // todo - there should be 2 sqs queues : one for sending and one for receiving- the one for receiving is at line 34 and 56 all the rest is the sending sqs-queue;
+    // todo - If a worker stops working unexpectedly before finishing its work on a message, then some other worker should be able to handle that message.
     public static void main(String[] args) throws IOException, ParserConfigurationException {
         EC2Adapter ec2Adapter = new EC2Adapter();
         S3Adapter s3Adapter = new S3Adapter();
         SQSAdapter sqsAdapter = new SQSAdapter();
-        List<Message> messages = sqsAdapter.retrieveMessage("queueUrl");
+        List<Message> messages = sqsAdapter.retrieveMessage("queueUrl"); //todo is that the queueurl?
+        String fileDir = null;
         for (Message m : messages) {
             String[] data = m.body().split(",");
             try {
-                handleMessage(data[0], data[1]);
-            } catch (Exception e) {
-                //todo - If an exception occurs, then the worker should recover from it, send a message to the manager of the input message that caused the exception together with a short description of the exception, and continue working on the next message.
-            }
+                fileDir = handleMessage(data[0], data[1], sqsAdapter, s3Adapter);
+                if (fileDir == "no such commend") {
+                    sqsAdapter.sendMessage("queueUrl", data[1] + "," + data[0] + ",do not support " + data[1]); //todo is that the queue-url?
+                } else if (fileDir == "could not downlowd the file") {
+                    continue;
+                } else {
+                    s3Adapter.putFileInBucketFromPath("<buckeName>", "<key>", fileDir);
 
+                    sqsAdapter.sendMessage("queueUrl", data[1] + "," + data[0] + ",<s3URL>"); //todo - chancge the s3url and queuee-url
+                    File f = new File(fileDir + "\\downloadPDFFIle.pdf");//todo - delete the file
+                    f.delete();
+                }
+
+            } catch (Exception e) {
+                sqsAdapter.sendMessage("queueUrl", data[1] + "," + data[0] + ",has failed duo to ParserConfigurationException or IOException"); //todo is that the queue-url?
+            }
         }
+        sqsAdapter.deleteMessage(messages, "<queueUrl>"); // todo i think that shuold be anther sqs
     }
 
-    private static void saveFileFromUrlWithJavaIO(String fileName, String fileUrl)
+    private static int saveFileFromUrlWithJavaIO(String fileName, String fileUrl)
             throws MalformedURLException, IOException {
         BufferedInputStream in = null;
         FileOutputStream fout = null;
@@ -53,38 +73,48 @@ public class WorekerMain {
             }
 
         } catch (MalformedURLException e) {
-            //todo -If an exception occurs while performing an operation on a PDF file, or the PDF file is not available, then output line for this file will be: <operation>: input file <a short description of the exception>.
+            return MALFORMED_URL_EXCEPTION;
+
+        } catch (IOException e) {
+            return IO_Exception;
+
         } finally {
             if (in != null)
                 in.close();
             if (fout != null)
                 fout.close();
         }
+        return SUCCESS_TO_DOWONLOAD;
     }
 
-    private static void handleMessage(String url, String action) throws IOException, ParserConfigurationException {
+    private static String handleMessage(String url, String action, SQSAdapter sqsAdapter, S3Adapter s3Adapter) throws IOException, ParserConfigurationException {
         String dirName = "C:\\FileDownload";
-        saveFileFromUrlWithJavaIO(dirName + "\\downloadPDFFIle.pdf", url);
+        if (saveFileFromUrlWithJavaIO(dirName + "\\downloadPDFFIle.pdf", url) == MALFORMED_URL_EXCEPTION) {
+            sqsAdapter.sendMessage("queueUrl", action + "," + url + ":the url is malformed"); //todo is that the queue-url?
+            return "could not download the file";
+
+        } else if (saveFileFromUrlWithJavaIO(dirName + "\\downloadPDFFIle.pdf", url) == IO_Exception) {
+            sqsAdapter.sendMessage("queueUrl", action + "," + url + ":IOException has happened"); //todo is that the queueu-rl?
+            return "could not download the file";
+        }
         switch (action) {
             case "ToImage":
-                toImage(dirName + "\\downloadPDFFIle.pdf");
+                dirName = toImage(dirName + "\\downloadPDFFIle.pdf");
                 break;
             case "ToHTML":
-                toHTML(dirName + "\\downloadPDFFIle.pdf");
+                dirName = toHTML(dirName + "\\downloadPDFFIle.pdf");
                 break;
             case "ToText":
-                toText(dirName + "\\downloadPDFFIle.pdf");
+                dirName = toText(dirName + "\\downloadPDFFIle.pdf");
                 break;
             default:
-                //toDo - what to do if no good action -//toDo - what to do if no good action - need to If an exception occurs while performing an operation on a PDF file, or the PDF file is not available, then output line for this file will be: <operation>: input file <a short description of the exception>.
+                dirName = "no such commend";
                 break;
         }
-        //File f = new File(dirName + "\\downloadPDFFIle.pdf");//todo - delete the file
-        //f.delete();
-
+        return dirName;
     }
 
-    private static void toImage(String fileName) throws IOException, ParserConfigurationException {
+    private static String toImage(String fileName) throws IOException {
         PDDocument document = PDDocument.load(new File(fileName));
         PDFRenderer pdfRenderer = new PDFRenderer(document);
 
@@ -95,9 +125,10 @@ public class WorekerMain {
                     bim, String.format("src/output/pdf-%d.%s", page + 1, "png"), 300);
         }
         document.close();
+        return "src/output/pdf-%d.%s";
     }
 
-    private static void toHTML(String fileName) throws IOException, ParserConfigurationException {
+    private static String toHTML(String fileName) throws IOException, ParserConfigurationException {
         PDDocument pdf = PDDocument.load(new File(fileName));
         PDPage page = pdf.getPage(0);
         PDDocument firstPage = new PDDocument();
@@ -105,9 +136,10 @@ public class WorekerMain {
         Writer output = new PrintWriter("src/output/pdf.html", "utf-8");
         new PDFDomTree().writeText(firstPage, output);
         output.close();
+        return "src/output/pdf.html";
     }
 
-    private static void toText(String fileName) throws IOException, ParserConfigurationException {
+    private static String toText(String fileName) throws IOException {
         File f = new File(fileName);
         String parsedText;
         PDFParser parser = new PDFParser((RandomAccessRead) new RandomAccessFile(f, "r"));
@@ -122,7 +154,6 @@ public class WorekerMain {
         PrintWriter pw = new PrintWriter("src/output/pdf.txt");
         pw.print(parsedText);
         pw.close();
+        return "src/output/pdf.txt";
     }
-
-
 }
