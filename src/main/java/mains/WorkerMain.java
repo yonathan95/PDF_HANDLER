@@ -1,3 +1,5 @@
+package mains;
+
 import adapters.S3Adapter;
 import adapters.SQSAdapter;
 import org.apache.pdfbox.cos.COSDocument;
@@ -30,9 +32,9 @@ public class WorkerMain {
     // todo - there should be 2 sqs queues : one for sending and one for receiving- the one for receiving is at line 34 and 56 all the rest is the sending sqs-queue;
     // todo - If a worker stops working unexpectedly before finishing its work on a message, then some other worker should be able to handle that message.
     public static void main(String[] args) throws IOException, ParserConfigurationException {
-        String inputQueueUrl = args[1];
-        String outputQueueUrl = args[2];
-        String bucketName = args[3];
+        String inputQueueUrl = args[0];
+        String outputQueueUrl = args[1];
+        String bucketName = args[2];
 
         S3Adapter s3Adapter = new S3Adapter();
         SQSAdapter sqsAdapter = new SQSAdapter();
@@ -41,23 +43,24 @@ public class WorkerMain {
         String fileDir = null;
         for (Message m : messages) {
             String[] data = m.body().split(",");
+            String url = data[0];
+            String action = data[1];
             try {
-                fileDir = handleMessage(data[0], data[1], sqsAdapter, outputQueueUrl);
+                fileDir = handleMessage(url, action, sqsAdapter, outputQueueUrl);
                 if (fileDir == "no such commend") {
-                    sqsAdapter.sendMessage(outputQueueUrl, data[1] + "," + data[0] + ",do not support " + data[1]); //todo is that the queue-url?
+                    sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",do not support " + action); //todo is that the queue-url?
                 } else if (fileDir == "could not download the file") {
                     continue;
                 } else {
                     String key = fileDir;
                     s3Adapter.putFileInBucketFromPath(bucketName, key, fileDir);
-                    String fileUrl = String.format(Main.S3filePathFormat, bucketName, key);
-                    sqsAdapter.sendMessage(outputQueueUrl, fileUrl); //todo - chancge the s3url and queuee-url
+                    sqsAdapter.sendMessage(outputQueueUrl, bucketName + "," + key); //todo - chancge the s3url and queuee-url
                     File f = new File(fileDir + "\\downloadPDFFIle.pdf");//todo - delete the file
                     f.delete();
                 }
 
             } catch (Exception e) {
-                sqsAdapter.sendMessage(outputQueueUrl, data[1] + "," + data[0] + ",has failed duo to ParserConfigurationException or IOException"); //todo is that the queue-url?
+                sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",has failed duo to ParserConfigurationException or IOException"); //todo is that the queue-url?
             }
         }
         sqsAdapter.deleteMessage(messages, inputQueueUrl); // todo i think that shuold be anther sqs
