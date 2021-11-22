@@ -1,5 +1,7 @@
 package adapters;
 
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 
@@ -8,9 +10,13 @@ import java.util.List;
 
 public class EC2Adapter {
 
-    private Ec2Client ec2 = Ec2Client.create();
+    private Ec2Client ec2;
 
     public EC2Adapter() {
+        AwsSessionCredentials awsCreds = AwsSessionCredentials.create(
+                "your_access_key_id",
+                "your_secret_access_key", "session_token");
+        ec2 = Ec2Client.builder().credentialsProvider(StaticCredentialsProvider.create(awsCreds)).build();
     }
 
     public String createEC2Instance(String name, String userData) {

@@ -7,7 +7,7 @@ import software.amazon.awssdk.services.sqs.model.*;
 import java.util.List;
 
 public class SQSAdapter {
-    private SqsClient sqsClient = SqsClient.builder().region(Region.US_WEST_2).build();
+    private SqsClient sqsClient = SqsClient.builder().region(Region.US_EAST_1).build();
 
     public SQSAdapter() {
     }

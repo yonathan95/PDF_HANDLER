@@ -13,9 +13,9 @@ import java.util.stream.Collectors;
 
 
 public class Main {
-    public static final String AWS_ACCESS_KEY_ID = "";
-    public static final String AWS_SECRET_ACCESS_KEY = "";
-    public static final String AWS_SESSION_TOKEN = "";
+    public static final String AWS_ACCESS_KEY_ID = "ASIAYVIKYYUP57EV34JZ";
+    public static final String AWS_SECRET_ACCESS_KEY = "OqlGAUXHd5dHSI7uVcUWO+7HgNdhmB7jYYO4Zqf+";
+    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEF8aDKN6H9VcRjgwf3y+7SLGAcwEmJrsFKvwPN0rFv0vyfz9FJLG/Hj5v1ycqP9Y+eqXRlomg2YCE8d6Va5jf46VHfpSc0fUv58i6AWEzhzLSvLxw9B7ZQKhCxt/pNsC/SdOQd4QDL8JmDCVkDQA9buM1N/4Yz+03PNfh/Y2dpnXxJdxzpXkHP7iIL56Uu1JE+D5MsvxOQ5yFDGl8pb3PK0PZTchr+ANiEpNhZAw/B4Yjrr397ox+zmhlSIEf4M9VPunChebEKh+2YmtcK13AUaKb1aW/yXKriiomumMBjItuDPvzAbLjaZ0WuGy+vbs43g+dsNqqhBVCNpz+DLOLyAF5JM5GrYnvZn99SsD";
     public static final String S3filePathFormat = "https://%s.s3.us-west-2.amazonaws.com/%s";
     private static final Integer RUNNING = 16;
     private static final String MANAGER_NODE_NAME = "ManagerNode";
@@ -32,7 +32,7 @@ public class Main {
         List<Instance> instances = ec2Adapter.describeEC2Instances();
 
         List<String> runningInstancesNames = instances.stream().filter(i -> (i.state().code() == RUNNING)).map(i -> i.tags().get(0).value()).collect(Collectors.toList());
-        if (!runningInstancesNames.contains("ManagerNode")) {
+        if (runningInstancesNames.isEmpty() || !runningInstancesNames.contains("ManagerNode")) {
 
             try {
 
@@ -72,7 +72,9 @@ public class Main {
                 ec2Adapter.terminateEC2Instance(managerInstanceId);
             }
         });
+        while (true) {
 
+        }
 
         //get results and create an html from the results
     }
@@ -84,16 +86,16 @@ public class Main {
         commands += "sudo yum install -y java-1.8.0-openjdk\n";
 
         //define env variables
-        commands += "export AWS_ACCESS_KEY_ID=" + AWS_ACCESS_KEY_ID + "\n";
-        commands += "export AWS_SECRET_ACCESS_KEY=" + AWS_SECRET_ACCESS_KEY + "\n";
-        commands += "export AWS_SESSION_TOKEN=" + AWS_SESSION_TOKEN + "\n";
-        commands += "export AWS_DEFAULT_REGION=us-west-2\n";
+        commands += "aws configure set AWS_ACCESS_KEY_ID " + AWS_ACCESS_KEY_ID + "\n";
+        commands += "aws configure set AWS_SECRET_ACCESS_KEY " + AWS_SECRET_ACCESS_KEY + "\n";
+        commands += "aws configure set AWS_SESSION_TOKEN " + AWS_SESSION_TOKEN + "\n";
+        commands += "aws configure set region us-west-2\n";
 
         // get jar from s3 bucket
         commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER.jar .\n";
 
         // run java
-        commands += String.format("java -jar <file_name>.jar %s %s %s\n", sqsUrl, 20/*args[3]*/, bucketName);
+        commands += String.format("java -jar PDF_HANDLER.jar %s %s %s\n", sqsUrl, 20/*args[3]*/, bucketName);
         return Base64.getEncoder().encodeToString(commands.getBytes(StandardCharsets.UTF_8));
     }
 }

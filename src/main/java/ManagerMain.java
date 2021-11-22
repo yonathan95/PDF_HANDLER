@@ -67,16 +67,16 @@ public class ManagerMain {
         commands += "sudo yum install -y java-1.8.0-openjdk\n";
 
         //define env variables
-        commands += "export AWS_ACCESS_KEY_ID=" + Main.AWS_ACCESS_KEY_ID + "\n";
-        commands += "export AWS_SECRET_ACCESS_KEY=" + Main.AWS_SECRET_ACCESS_KEY + "\n";
-        commands += "export AWS_SESSION_TOKEN=" + Main.AWS_SESSION_TOKEN + "\n";
-        commands += "export AWS_DEFAULT_REGION=us-west-2\n";
+        commands += "aws configure set AWS_ACCESS_KEY_ID " + Main.AWS_ACCESS_KEY_ID + "\n";
+        commands += "aws configure set AWS_SECRET_ACCESS_KEY " + Main.AWS_SECRET_ACCESS_KEY + "\n";
+        commands += "aws configure set AWS_SESSION_TOKEN " + Main.AWS_SESSION_TOKEN + "\n";
+        commands += "aws configure set region us-west-2\n";
 
         // get jar from s3 bucket
-        commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER.jar .\n";
+        commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER_WORKER.jar .\n";
 
         // run java
-        commands += String.format("java -jar PDF_HANDLER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, bucketName);
+        commands += String.format("java -jar PDF_HANDLER_WORKER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, bucketName);
         return Base64.getEncoder().encodeToString(commands.getBytes(StandardCharsets.UTF_8));
     }
 }

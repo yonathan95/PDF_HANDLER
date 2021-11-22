@@ -12,7 +12,7 @@ import java.io.IOException;
 import java.nio.file.Paths;
 
 public class S3Adapter {
-    private S3Client s3 = S3Client.builder().region(Region.US_WEST_2).build();
+    private S3Client s3 = S3Client.builder().region(Region.US_EAST_1).build();
 
     public S3Adapter() {
 
@@ -24,7 +24,7 @@ public class S3Adapter {
                 .bucket(bucket)
                 .createBucketConfiguration(
                         CreateBucketConfiguration.builder()
-                                .locationConstraint(Region.US_WEST_2.id())
+                                .locationConstraint(Region.US_EAST_1.id())
                                 .build())
                 .build());
     }
