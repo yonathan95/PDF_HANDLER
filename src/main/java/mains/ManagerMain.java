@@ -95,17 +95,12 @@ public class ManagerMain {
         commands += "echo aws_access_key_id=ASIAYVIKYYUPXEAS2NWE >> /home/ec2-user/.aws/credentials\n";
         commands += "echo aws_secret_access_key=/P2nmHqtx6J/MuWuSph/gAU3HKdZZ+NztdzsoyFH >> /home/ec2-user/.aws/credentials\n";
         commands += "echo aws_session_token=FwoGZXIvYXdzEHgaDAUlc64uoRx75t547SLGAa2Z5KaIf/nMXw9WrFgiTlL0sV9xKiH2YyMVSZtRaqvlcXiK7+etZfyJttFrcrKPHYWn/jlVcQqEcVa/MGU40G1eDIpkHk5Eg7SQOgo8pD0xviyzLcqQ77cmaY0E8dZExRwJHxCcQp+1mJ641sAPi4pAViV6xxakEMj7iwtA9WHEhPMD4k1RSVdkjD9qpGkOWVe2hLKm+tlV2pMtGQFzWBO7LuSG85FVxAvAL3WrfZ5rKgwUGN4EtOx+Vv4ZBpCek9ZOvzxlTCiS0+6MBjItTdQrHJ3UWxhhzfFO+j674pxIUIxmcbpuxy6IciWlJhtn9PqUQNS5nHnPgnSJ >> /home/ec2-user/.aws/credentials\n";
-        commands += "aws configure set AWS_ACCESS_KEY_ID " + Main.AWS_ACCESS_KEY_ID + "\n";
-        commands += "aws configure set AWS_SECRET_ACCESS_KEY " + Main.AWS_SECRET_ACCESS_KEY + "\n";
-        commands += "aws configure set AWS_SESSION_TOKEN " + Main.AWS_SESSION_TOKEN + "\n";
-        commands += "export AWS_ACCESS_KEY_ID=" + Main.AWS_ACCESS_KEY_ID + "\n";
-        commands += "export AWS_SECRET_ACCESS_KEY=" + Main.AWS_SECRET_ACCESS_KEY + "\n";
-        commands += "export AWS_SESSION_TOKEN=" + Main.AWS_SESSION_TOKEN + "\n";
 
         // get jar from s3 bucket
-        commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER_WORKER.jar /home/ec2-user/\n";
+        commands += "cd /home/ec2-user\n";
+        commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER_WORKER.jar .\n";
         // run java
-        commands += String.format("java -jar /home/ec2-user/PDF_HANDLER_WORKER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, bucketName);
+        commands += String.format("java -jar PDF_HANDLER_WORKER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, bucketName);
         commands += "echo 'Woot!' > /home/ec2-user/user-script-output.txt\n";
         return Base64.getEncoder().encodeToString(commands.getBytes(StandardCharsets.UTF_8));
     }
