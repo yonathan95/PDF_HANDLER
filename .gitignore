@@ -1,3 +1,5 @@
 /target/
 /.idea/
-/src/run.sh
+/out/
+/src/main/resources/
+/src/main/java/mains/TestMain.java

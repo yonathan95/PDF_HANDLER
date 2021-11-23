@@ -1,21 +1,23 @@
 package adapters;
 
 
-import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class S3Adapter {
-    private S3Client s3 = S3Client.builder().region(Region.US_WEST_2).build();
+    private S3Client s3;
 
     public S3Adapter() {
-
+        s3 = S3Client.builder().credentialsProvider(DefaultCredentialsProvider.create()).region(Region.US_WEST_2).build();
     }
 
     public CreateBucketResponse createBucket(String bucket) {
@@ -64,14 +66,13 @@ public class S3Adapter {
         return s3.putObject(objectRequest, body);
     }
 
-    public ResponseInputStream<GetObjectResponse> getObject(String bucketName, String key) {
+    public void getObject(String bucketName, String key, Path destination) {
 
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(bucketName)
                 .key(key)
                 .build();
-
-        return s3.getObject(getObjectRequest);
+        s3.getObject(getObjectRequest, ResponseTransformer.toFile(destination));
     }
 
     public DeleteObjectResponse deleteObject(String bucketName, String key) {

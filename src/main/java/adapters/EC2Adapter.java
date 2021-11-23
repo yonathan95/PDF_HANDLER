@@ -1,5 +1,6 @@
 package adapters;
 
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.*;
 
@@ -11,6 +12,7 @@ public class EC2Adapter {
     private Ec2Client ec2 = Ec2Client.create();
 
     public EC2Adapter() {
+        ec2 = Ec2Client.builder().credentialsProvider(DefaultCredentialsProvider.create()).build();
     }
 
     public String createEC2Instance(String name, String userData) {
@@ -49,30 +51,36 @@ public class EC2Adapter {
 
     }
 
-    public void startInstance(String instanceId) {
+    public StartInstancesResponse startInstance(String instanceId) {
 
         StartInstancesRequest request = StartInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
 
-        ec2.startInstances(request);
+        return ec2.startInstances(request);
     }
 
-    public void stopInstance(String instanceId) {
+    public StopInstancesResponse stopInstance(String instanceId) {
 
         StopInstancesRequest request = StopInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
 
-        ec2.stopInstances(request);
+        return ec2.stopInstances(request);
     }
 
-    public void rebootEC2Instance(String instanceId) {
+    public RebootInstancesResponse rebootEC2Instance(String instanceId) {
         RebootInstancesRequest request = RebootInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
+        return ec2.rebootInstances(request);
+    }
 
-        ec2.rebootInstances(request);
+    public TerminateInstancesResponse terminateEC2Instance(String instanceId) {
+        TerminateInstancesRequest request = TerminateInstancesRequest.builder()
+                .instanceIds(instanceId)
+                .build();
+        return ec2.terminateInstances(request);
     }
 
     public List<Instance> describeEC2Instances() {
@@ -91,5 +99,6 @@ public class EC2Adapter {
             instances.addAll(res.instances());
         }
         return instances;
+
     }
 }
