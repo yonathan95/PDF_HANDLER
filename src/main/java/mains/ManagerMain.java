@@ -6,8 +6,7 @@ import adapters.SQSAdapter;
 import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 
-import java.io.File;
-import java.io.FileNotFoundException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -71,11 +70,37 @@ public class ManagerMain {
                 }
             }
         });
+        int count = 0;
+        File summaryFile = new File("<where>\\<name>.html"); //todo - we need to decide where to save it and how to call it
+        try {
+            BufferedWriter bw = new BufferedWriter(new FileWriter(summaryFile));
+            while (count < fileCount) {
 
-        while (true) {
+                List<Message> responseMessages = sqsAdapter.retrieveOneMessage(outputQueue.queueUrl());
+                String[] response = responseMessages.get(0).body().split(",");
+                if (response.length == 4) {
+                    String origUrl = response[0];
+                    String key = response[1];
+                    String bucket = response[2];
+                    String action = response[3];
+                    String newUrl = String.format("https://%s.s3.us-west-2.amazonaws.com/%s", bucket, key);
+                    bw.write("<dif><p>" + action + "\t" + origUrl + "\t" + newUrl + "\n</p></dif>");
 
+
+                } else {
+                    String action = response[0];
+                    String origUrl = response[1];
+                    String whyFail = response[2];
+                    bw.write("<dif><p>" + action + "\t" + origUrl + "\t" + whyFail + "\n</p></dif>");
+                }
+                count++;
+            }
+            bw.close();
+        } catch (IOException ioException) {
+            ioException.printStackTrace();
         }
     }
+
 
     private static String getRunShellCommands(String inputSqsUrl, String outputSqsUrl, String bucketName) {
         String commands = "";

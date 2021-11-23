@@ -54,8 +54,8 @@ public class WorkerMain {
                 } else {
                     String key = fileDir;
                     s3Adapter.putFileInBucketFromPath(bucketName, key, fileDir);
-                    sqsAdapter.sendMessage(outputQueueUrl, bucketName + "," + key); //todo - chancge the s3url and queuee-url
-                    File f = new File(fileDir + "\\downloadPDFFIle.pdf");//todo - delete the file
+                    sqsAdapter.sendMessage(outputQueueUrl, url + "," + key + "," + bucketName + "," + action); //todo - chancge the s3url and queuee-url
+                    File f = new File(fileDir + "\\downloadPDFFIle.pdf");
                     f.delete();
                 }
 
