@@ -2,15 +2,16 @@ package adapters;
 
 
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
+import java.io.InputStreamReader;
 import java.nio.file.Paths;
 
 public class S3Adapter {
@@ -66,13 +67,14 @@ public class S3Adapter {
         return s3.putObject(objectRequest, body);
     }
 
-    public void getObject(String bucketName, String key, Path destination) {
+    public BufferedReader getObject(String bucketName, String key) {
 
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(bucketName)
                 .key(key)
                 .build();
-        s3.getObject(getObjectRequest, ResponseTransformer.toFile(destination));
+        ResponseInputStream<GetObjectResponse> response = s3.getObject(getObjectRequest);
+        return new BufferedReader(new InputStreamReader(response));
     }
 
     public DeleteObjectResponse deleteObject(String bucketName, String key) {

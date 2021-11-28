@@ -8,26 +8,43 @@ import software.amazon.awssdk.services.sqs.model.Message;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Scanner;
+import java.util.stream.Collectors;
 
 public class ManagerMain {
     public static void main(String[] args) throws FileNotFoundException { //params 0: local-app sqsUrl, params 1: n, params 2: bucket name
         EC2Adapter ec2Adapter = new EC2Adapter();
         S3Adapter s3Adapter = new S3Adapter();
         SQSAdapter sqsAdapter = new SQSAdapter();
-        String sqsUrl = args[0];
-        Integer n = Integer.parseInt(args[1]);
-        String bucketName = args[2];
+        boolean terminated = false;
 
+        while (true) {
+            //listen to new work
+            if (!terminated) {
+                List<Message> messages = sqsAdapter.retrieveOneMessage(Main.programSqsUrl);
+                if (!messages.isEmpty()) {
+                    //handle new job
+                    String[] messageData = messages.get(0).body().split(",");
+                    String inputFileKey = messageData[0];
+                    String localAppSqs = messageData[1];
+                    int n = Integer.parseInt(messageData[2]);
+                    if (messageData.length == 4) terminated = true;
+                    startLocalAppRequest(inputFileKey, localAppSqs, n);
+                }
+            }
+
+
+            //process current work
+
+
+        }
         //get the input file from s3
-        List<Message> messages = sqsAdapter.retrieveOneMessage(sqsUrl);
+        List<Message> messages = sqsAdapter.retrieveOneMessage(Main.programSqsUrl);
         String[] messsageData = messages.get(0).body().split(",");
-        String inputFilePath = Main.currDir + "/inputFile.txt";
-        s3Adapter.getObject(messsageData[0], messsageData[1], Paths.get(inputFilePath));
+        BufferedReader buffer = s3Adapter.getObject(messsageData[0], messsageData[1]);
+        List<String> lines = buffer.lines().collect(Collectors.toList());
 
         //create workers queue
         CreateQueueResponse inputQueue = sqsAdapter.createQueue("workers-input-queue");
@@ -37,10 +54,7 @@ public class ManagerMain {
 
         //create sqs message for each URL in the input file and add it to the sqs
         int fileCount = 0;
-        File inputFile = new File(inputFilePath);
-        Scanner myReader = new Scanner(inputFile);
-        while (myReader.hasNextLine()) {
-            String line = myReader.nextLine();
+        for (String line : lines) {
             String[] data = line.split("\t");
             String url = data[1];
             String action = data[0];
@@ -48,8 +62,7 @@ public class ManagerMain {
             sqsAdapter.sendMessage(inputQueueUrl, message);
             fileCount += 1;
         }
-        myReader.close();
-        inputFile.delete();
+
 
         //create workers
         List<String> workers = new ArrayList<>();
@@ -58,17 +71,6 @@ public class ManagerMain {
             String workerId = ec2Adapter.createEC2Instance(String.format("worker-%s", i), userData);
             workers.add(workerId);
         }
-
-
-        //termination
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            @Override
-            public void run() {
-                for (String workerId : workers) {
-                    ec2Adapter.terminateEC2Instance(workerId);
-                }
-            }
-        });
         int count = 0;
         File summaryFile = new File("<where>\\<name>.html"); //todo - we need to decide where to save it and how to call it
         try {
@@ -95,11 +97,12 @@ public class ManagerMain {
                 count++;
             }
             bw.close();
-        } catch (IOException ioException) {
-            ioException.printStackTrace();
-        }
     }
 
+
+    private static void startLocalAppRequest(String inputFileKey, String localAppSqs, int n) {
+
+    }
 
     private static String getRunShellCommands(String inputSqsUrl, String outputSqsUrl, String bucketName) {
         String commands = "";
@@ -119,12 +122,17 @@ public class ManagerMain {
         commands += "echo aws_access_key_id=ASIAYVIKYYUPXEAS2NWE >> /home/ec2-user/.aws/credentials\n";
         commands += "echo aws_secret_access_key=/P2nmHqtx6J/MuWuSph/gAU3HKdZZ+NztdzsoyFH >> /home/ec2-user/.aws/credentials\n";
         commands += "echo aws_session_token=FwoGZXIvYXdzEHgaDAUlc64uoRx75t547SLGAa2Z5KaIf/nMXw9WrFgiTlL0sV9xKiH2YyMVSZtRaqvlcXiK7+etZfyJttFrcrKPHYWn/jlVcQqEcVa/MGU40G1eDIpkHk5Eg7SQOgo8pD0xviyzLcqQ77cmaY0E8dZExRwJHxCcQp+1mJ641sAPi4pAViV6xxakEMj7iwtA9WHEhPMD4k1RSVdkjD9qpGkOWVe2hLKm+tlV2pMtGQFzWBO7LuSG85FVxAvAL3WrfZ5rKgwUGN4EtOx+Vv4ZBpCek9ZOvzxlTCiS0+6MBjItTdQrHJ3UWxhhzfFO+j674pxIUIxmcbpuxy6IciWlJhtn9PqUQNS5nHnPgnSJ >> /home/ec2-user/.aws/credentials\n";
+        commands += "aws configure set AWS_ACCESS_KEY_ID " + Main.AWS_ACCESS_KEY_ID + "\n";
+        commands += "aws configure set AWS_SECRET_ACCESS_KEY " + Main.AWS_SECRET_ACCESS_KEY + "\n";
+        commands += "aws configure set AWS_SESSION_TOKEN " + Main.AWS_SESSION_TOKEN + "\n";
+        commands += "export AWS_ACCESS_KEY_ID=" + Main.AWS_ACCESS_KEY_ID + "\n";
+        commands += "export AWS_SECRET_ACCESS_KEY=" + Main.AWS_SECRET_ACCESS_KEY + "\n";
+        commands += "export AWS_SESSION_TOKEN=" + Main.AWS_SESSION_TOKEN + "\n";
 
         // get jar from s3 bucket
-        commands += "cd /home/ec2-user\n";
-        commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER_WORKER.jar .\n";
+        commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER_WORKER.jar /home/ec2-user/\n";
         // run java
-        commands += String.format("java -jar PDF_HANDLER_WORKER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, bucketName);
+        commands += String.format("java -jar /home/ec2-user/PDF_HANDLER_WORKER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, bucketName);
         commands += "echo 'Woot!' > /home/ec2-user/user-script-output.txt\n";
         return Base64.getEncoder().encodeToString(commands.getBytes(StandardCharsets.UTF_8));
     }
