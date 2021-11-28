@@ -19,6 +19,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -29,7 +30,6 @@ public class WorkerMain {
     public static final int SUCCESS_TO_DOWONLOAD = 3;
     public static final String currDir = System.getProperty("user.dir");
 
-    // todo - there should be 2 sqs queues : one for sending and one for receiving- the one for receiving is at line 34 and 56 all the rest is the sending sqs-queue;
     // todo - If a worker stops working unexpectedly before finishing its work on a message, then some other worker should be able to handle that message.
     public static void main(String[] args) throws IOException, ParserConfigurationException {
         String inputQueueUrl = args[0];
@@ -38,32 +38,37 @@ public class WorkerMain {
 
         S3Adapter s3Adapter = new S3Adapter();
         SQSAdapter sqsAdapter = new SQSAdapter();
-
-        List<Message> messages = sqsAdapter.retrieveOneMessage(inputQueueUrl); //todo is that the queueurl?
-        String fileDir = null;
-        for (Message m : messages) {
+        List<Message> messages = new ArrayList<>();
+        while (true) {
+            do {
+                messages = sqsAdapter.retrieveOneMessage(inputQueueUrl);
+            } while (messages.isEmpty());
+            String fileDir = null;
+            Message m = messages.get(0);
             String[] data = m.body().split(",");
             String url = data[0];
             String action = data[1];
             try {
                 fileDir = handleMessage(url, action, sqsAdapter, outputQueueUrl);
                 if (fileDir == "no such commend") {
-                    sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",do not support " + action); //todo is that the queue-url?
+                    sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",do not support " + action);
                 } else if (fileDir == "could not download the file") {
                     continue;
                 } else {
                     String key = fileDir;
                     s3Adapter.putFileInBucketFromPath(bucketName, key, fileDir);
-                    sqsAdapter.sendMessage(outputQueueUrl, url + "," + key + "," + bucketName + "," + action); //todo - chancge the s3url and queuee-url
+                    sqsAdapter.sendMessage(outputQueueUrl, url + "," + key + "," + bucketName + "," + action);
                     File f = new File(fileDir + "\\downloadPDFFIle.pdf");
                     f.delete();
                 }
 
             } catch (Exception e) {
-                sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",has failed duo to ParserConfigurationException or IOException"); //todo is that the queue-url?
+                sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",has failed duo to ParserConfigurationException or IOException");
             }
+            sqsAdapter.deleteMessage(messages, inputQueueUrl);
         }
-        sqsAdapter.deleteMessage(messages, inputQueueUrl); // todo i think that shuold be anther sqs
+
+
     }
 
     private static int saveFileFromUrlWithJavaIO(String fileName, String fileUrl)

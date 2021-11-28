@@ -19,7 +19,6 @@ public class ManagerMain {
         EC2Adapter ec2Adapter = new EC2Adapter();
         S3Adapter s3Adapter = new S3Adapter();
         SQSAdapter sqsAdapter = new SQSAdapter();
-
         String sqsUrl = args[0];
         Integer n = Integer.parseInt(args[1]);
         String bucketName = args[2];

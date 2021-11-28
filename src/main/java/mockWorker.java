@@ -19,7 +19,7 @@ import java.net.URL;
 public class mockWorker {
 
     public static void main(String[] args) throws IOException, ParserConfigurationException {
-        handleMessage("http://www.pdf995.com/samples/pdf.pdf", "ToHTML");
+        handleMessage("http://www.pdf995.com/samples/pdf.pdf", "ToImage");
     }
 
     private static void saveFileFromUrlWithJavaIO(String fileName, String fileUrl)
@@ -109,7 +109,7 @@ public class mockWorker {
         PDPage page = pdf.getPage(0);
         PDDocument firstPage = new PDDocument();
         firstPage.addPage(page);
-        Writer output = new PrintWriter("src/main/java/pdf.html", "utf-8");
+        Writer output = new PrintWriter("/Users/eladweinfeld/Desktop/testaws/dsfsdf/pdf.html", "utf-8");
         new PDFDomTree().writeText(firstPage, output);
         output.close();
     }
