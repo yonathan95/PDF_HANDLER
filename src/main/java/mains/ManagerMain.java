@@ -3,22 +3,34 @@ package mains;
 import adapters.EC2Adapter;
 import adapters.S3Adapter;
 import adapters.SQSAdapter;
+import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class ManagerMain {
+    private static final EC2Adapter ec2Adapter = new EC2Adapter();
+    private static final S3Adapter s3Adapter = new S3Adapter();
+    private static final SQSAdapter sqsAdapter = new SQSAdapter();
+    private static String workersInputQueueUrl;
+    private static String workersOutputQueueUrl;
+    private static HashMap<String, Integer> approxWorkCount = new HashMap<>();
+    private static HashMap<String, HashSet<String>> localAppsMap = new HashMap<>();
+    private static List<String> workers = new ArrayList<>();
+
     public static void main(String[] args) throws FileNotFoundException { //params 0: local-app sqsUrl, params 1: n, params 2: bucket name
-        EC2Adapter ec2Adapter = new EC2Adapter();
-        S3Adapter s3Adapter = new S3Adapter();
-        SQSAdapter sqsAdapter = new SQSAdapter();
         boolean terminated = false;
+        CreateQueueResponse inputQueue = sqsAdapter.createQueue("workers-input-queue");
+        workersInputQueueUrl = inputQueue.queueUrl();
+        CreateQueueResponse outputQueue = sqsAdapter.createQueue("workers-output-queue");
+        workersOutputQueueUrl = outputQueue.queueUrl();
+
 
         while (true) {
             //listen to new work
@@ -31,77 +43,99 @@ public class ManagerMain {
                     String localAppSqs = messageData[1];
                     int n = Integer.parseInt(messageData[2]);
                     if (messageData.length == 4) terminated = true;
+                    localAppsMap.put(localAppSqs, new HashSet<>());
                     startLocalAppRequest(inputFileKey, localAppSqs, n);
                 }
             }
 
+            List<Message> workersMessages = sqsAdapter.retrieveMessage(Main.programSqsUrl, 10, 1);
+            for (Message message : workersMessages) {
+                //add implementation
+                handleWorkerMessage(message);
+            }
 
-            //process current work
+            for (Map.Entry<String, HashSet<String>> localApp : localAppsMap.entrySet()) {
+                if (localApp.getValue().size() == approxWorkCount.get(localApp.getKey())) {
+                    summarizeWork(localApp);
+                    localAppsMap.remove(localApp.getKey());
+                    approxWorkCount.remove(localApp.getKey());
+                }
+            }
 
-
+            if (terminated && approxWorkCount.isEmpty()) {
+                terminate();
+                break;
+            }
         }
-        //get the input file from s3
-        List<Message> messages = sqsAdapter.retrieveOneMessage(Main.programSqsUrl);
-        String[] messsageData = messages.get(0).body().split(",");
-        BufferedReader buffer = s3Adapter.getObject(messsageData[0], messsageData[1]);
+    }
+
+    private static void summarizeWork(Map.Entry<String, HashSet<String>> localApp) {
+        String summary = "";
+        for (String line : localApp.getValue()) {
+            summary += line + "\n";
+        }
+        String key = String.format("summary-%s", localApp.getKey());
+        try {
+            s3Adapter.putFileInBucketFromBytes(Main.programBucketName, key, summary.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        sqsAdapter.sendMessage(localApp.getKey(), key);
+    }
+
+    private static void handleWorkerMessage(Message message) {
+        String[] workerMessageData = message.body().split(",");
+        switch (workerMessageData[4]) {
+            case "success": {
+                String origUrl = workerMessageData[0];
+                String key = workerMessageData[1];
+                String localAppUrl = workerMessageData[2];
+                String action = workerMessageData[3];
+                String newUrl = String.format("https://%s.s3.us-west-2.amazonaws.com/%s", Main.programBucketName, key);
+                localAppsMap.get(localAppUrl).add("<dif><p>" + action + "\t" + origUrl + "\t" + newUrl + "\n</p></dif>");
+                break;
+            }
+            default: {
+                String action = workerMessageData[0];
+                String origUrl = workerMessageData[1];
+                String whyFail = workerMessageData[2];
+                String localAppUrl = workerMessageData[3];
+                localAppsMap.get(localAppUrl).add("<dif><p>" + action + "\t" + origUrl + "\t" + whyFail + "\n</p></dif>");
+                break;
+            }
+        }
+    }
+
+    private static void terminate() {
+        for (String worker : workers) {
+            try {
+                ec2Adapter.terminateEC2Instance(worker);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static void startLocalAppRequest(String inputFileKey, String localAppSqs, int n) {
+        BufferedReader buffer = s3Adapter.getObject(Main.programBucketName, inputFileKey);
         List<String> lines = buffer.lines().collect(Collectors.toList());
+        approxWorkCount.put(localAppSqs, lines.size());
 
-        //create workers queue
-        CreateQueueResponse inputQueue = sqsAdapter.createQueue("workers-input-queue");
-        CreateQueueResponse outputQueue = sqsAdapter.createQueue("workers-output-queue");
-        String inputQueueUrl = inputQueue.queueUrl();
-        String outputQueueUrl = outputQueue.queueUrl();
-
-        //create sqs message for each URL in the input file and add it to the sqs
-        int fileCount = 0;
         for (String line : lines) {
             String[] data = line.split("\t");
             String url = data[1];
             String action = data[0];
-            String message = url + "," + action;
-            sqsAdapter.sendMessage(inputQueueUrl, message);
-            fileCount += 1;
+            String message = url + "," + action + "," + localAppSqs;
+            sqsAdapter.sendMessage(workersInputQueueUrl, message);
         }
 
-
         //create workers
-        List<String> workers = new ArrayList<>();
-        for (int i = 0; i < Math.min(7, Math.ceil(fileCount / n)); i++) {
-            String userData = getRunShellCommands(inputQueueUrl, outputQueueUrl, bucketName);
+        List<Instance> openInstances = ec2Adapter.describeEC2Instances().stream().filter(i -> i.state().code().intValue() != 43).collect(Collectors.toList());
+        int maxNumberOfWorkers = 10 - openInstances.size();
+        for (int i = 0; i < Math.min(maxNumberOfWorkers, Math.ceil(lines.size() / n)); i++) {
+            String userData = getRunShellCommands(workersInputQueueUrl, workersOutputQueueUrl, Main.programBucketName);
             String workerId = ec2Adapter.createEC2Instance(String.format("worker-%s", i), userData);
             workers.add(workerId);
         }
-        int count = 0;
-        File summaryFile = new File("<where>\\<name>.html"); //todo - we need to decide where to save it and how to call it
-        try {
-            BufferedWriter bw = new BufferedWriter(new FileWriter(summaryFile));
-            while (count < fileCount) {
-
-                List<Message> responseMessages = sqsAdapter.retrieveOneMessage(outputQueue.queueUrl());
-                String[] response = responseMessages.get(0).body().split(",");
-                if (response.length == 4) {
-                    String origUrl = response[0];
-                    String key = response[1];
-                    String bucket = response[2];
-                    String action = response[3];
-                    String newUrl = String.format("https://%s.s3.us-west-2.amazonaws.com/%s", bucket, key);
-                    bw.write("<dif><p>" + action + "\t" + origUrl + "\t" + newUrl + "\n</p></dif>");
-
-
-                } else {
-                    String action = response[0];
-                    String origUrl = response[1];
-                    String whyFail = response[2];
-                    bw.write("<dif><p>" + action + "\t" + origUrl + "\t" + whyFail + "\n</p></dif>");
-                }
-                count++;
-            }
-            bw.close();
-    }
-
-
-    private static void startLocalAppRequest(String inputFileKey, String localAppSqs, int n) {
-
     }
 
     private static String getRunShellCommands(String inputSqsUrl, String outputSqsUrl, String bucketName) {
@@ -130,10 +164,12 @@ public class ManagerMain {
         commands += "export AWS_SESSION_TOKEN=" + Main.AWS_SESSION_TOKEN + "\n";
 
         // get jar from s3 bucket
-        commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER_WORKER.jar /home/ec2-user/\n";
+        commands += "aws s3 cp s3://program-bucket-28031995/PDF_HANDLER_WORKER.jar /home/ec2-user/\n";
         // run java
         commands += String.format("java -jar /home/ec2-user/PDF_HANDLER_WORKER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, bucketName);
         commands += "echo 'Woot!' > /home/ec2-user/user-script-output.txt\n";
         return Base64.getEncoder().encodeToString(commands.getBytes(StandardCharsets.UTF_8));
     }
 }
+
+

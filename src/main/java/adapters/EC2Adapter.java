@@ -20,7 +20,7 @@ public class EC2Adapter {
 
         String amiId = "ami-04ad2567c9e3d7893";
         List<String> securityGroupIds = new ArrayList();
-        securityGroupIds.add("sg-00327f5109f933ecf");
+        securityGroupIds.add("sg-067f67df6351d14ad");
 
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
@@ -28,7 +28,7 @@ public class EC2Adapter {
                 .maxCount(1)
                 .minCount(1)
                 .userData(userData)
-                .keyName("multi-key")
+                .keyName("program-key")
                 .securityGroupIds(securityGroupIds)
                 .build();
 

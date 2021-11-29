@@ -7,7 +7,7 @@ import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -15,12 +15,11 @@ import java.util.stream.Collectors;
 
 
 public class Main {
-    public static final String AWS_ACCESS_KEY_ID = "ASIAYVIKYYUPUILNHXF3";
-    public static final String AWS_SECRET_ACCESS_KEY = "RPU9RZyPz6pj9V6sx+IcnPFKRLsrdPN9p6Xn+/QV";
-    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEHwaDH04RwuQNyx9giiGqCLGAbMWyH/XKd1LWrrYXwtQ2Wy69YefMVaHBlx8bZX/YvguXSc9gMAvYlUXZ5mBml34jCkZklQfWrie0+yBA29BgvOWBHOOEuv16AVCNodLKHC1Da59oiFsl5O38i6r7pALeOJbSpjKT9MmcsHA5dxvxRrZwmNBENtdD6eu6tIKac9WkiQ+WIYS3sQsSeU9niB4QG/G+2KnmiWdBK6UkQId+nVRDcxXd8ornKkZjxTS5awbiZ/exm1JBpxWADo2Dj4IlzK0SsBStyj1xO+MBjItyWsKB1EXk+uGdnh5ukj9HISGejKdRPU1a02c9pw9zJbBAt7OYg7WF3fYmWoL";
-    public static final String currDir = System.getProperty("user.dir");
-    public static final String programSqsUrl = "https://sqs.us-east-1.amazonaws.com/595412436255/programSqs";
-    public static final String programBucketName = "local-app-bucket-27031995";
+    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYH2CRXJSY";
+    public static final String AWS_SECRET_ACCESS_KEY = "h71/CcCZTk28uTSj9qvkZUkr4MiLltoUigExx7oP";
+    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEAsaDP9O3xO4Bb/ZouDCaiLIAYxZMNaCZU3wO1iAQPIVvnPij2Up3M5sEn90DNPeuKboJEJaqG1S622tibivkbHDqPHgs2JgmjD4rCbbGiZQl2St9ywA9MDbH7oP0iMpOCOKNE90JVgxYYIgS2tmhmyg/gqejpngO/RZ9T0ASlFPknEU/Sc6NXUWHhIjoe6Bip3kfMqphNOX3d26c8g48a8otYWEtaa8cozZPG07Jwv0Cbz+Kwm8TYV5bIxOXDteu/vHZzBFOSrqctigtJmgDAFzQbmTS8i+qtXWKKiAj40GMi0dCGPdabPbBqJ8ePhzNMezaLr4o3u9WQRCnz4/glw8F5yG7bBoeBD9GtMBlm0=+RpU03KH8qMamufhenM9hxoTUXPNwU5YW9owSM5M9jNYlhzjcQCaB1yLIgiDx10usibnVoh/RpRhCjCt46NBjItFYPSPwwSCu8jHZKo05FbtSQmM9RWXP4dzTJjTrq7MAuDg6g5/RGU5TFKcx9l";
+    public static final String programSqsUrl = "https://sqs.us-east-1.amazonaws.com/826355905904/program-queue";
+    public static final String programBucketName = "program-bucket-28031995";
     private static final Integer RUNNING = 16;
     private static final String MANAGER_NODE_NAME = "ManagerNode";
     private static final EC2Adapter ec2Adapter = new EC2Adapter();
@@ -47,7 +46,7 @@ public class Main {
 
             //upload input file to s3
             String keyName = String.format("inputFile-%s.txt", localAppId);
-            s3Adapter.putFileInBucketFromPath(programBucketName, keyName, "C:\\Users\\Yonathan Wolloch\\Downloads\\input-sample-1.txt"); //todo change path to args[?]
+            s3Adapter.putFileInBucketFromPath(programBucketName, keyName, inputFilePath); //todo change path to args[?]
 
             //send a message to sqs queue with the location of the file
             String queueName = String.format("localAppQueue-%s", localAppId);
@@ -61,22 +60,30 @@ public class Main {
             e.printStackTrace();
         }
         boolean finished = false;
+
         while (!finished) {
-            List<Message> message = sqsAdapter.retrieveMessage(queueUrl, 1, 30);
-            if (!message.isEmpty()) {
-                //do something
-
-
-                finished = true;
+            List<Message> messages = sqsAdapter.retrieveMessage(queueUrl, 1, 20);
+            if (!messages.isEmpty()) {
+                BufferedReader buffer = s3Adapter.getObject(Main.programBucketName, messages.get(0).body());
+                List<String> lines = buffer.lines().collect(Collectors.toList());
+                File outputFile = new File(outputFilePath);
+                try {
+                    BufferedWriter bw = new BufferedWriter(new FileWriter(outputFile));
+                    for (String line : lines) {
+                        bw.write(line);
+                    }
+                    finished = true;
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
-
     }
 
     private static boolean isManagerRunning() {
         List<Instance> instances = ec2Adapter.describeEC2Instances();
         List<String> runningInstancesNames = instances.stream().filter(i -> (i.state().code() == RUNNING)).map(i -> i.tags().get(0).value()).collect(Collectors.toList());
-        return runningInstancesNames.isEmpty() || !runningInstancesNames.contains("ManagerNode");
+        return !runningInstancesNames.isEmpty() && runningInstancesNames.contains("ManagerNode");
     }
 
     private static void initiateManagerInstance() {
@@ -111,7 +118,7 @@ public class Main {
         commands += "export AWS_SESSION_TOKEN=" + AWS_SESSION_TOKEN + "\n";
 
         // get jar from s3 bucket
-        commands += "aws s3 cp s3://local-app-bucket-27031995/PDF_HANDLER.jar /home/ec2-user/\n";
+        commands += "aws s3 cp s3://program-bucket-28031995/PDF_HANDLER.jar /home/ec2-user/\n";
 
         // run java
         commands += "java -jar /home/ec2-user/PDF_HANDLER.jar\n";

@@ -19,6 +19,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,6 +30,7 @@ public class WorkerMain {
     public static final int IO_Exception = 2;
     public static final int SUCCESS_TO_DOWONLOAD = 3;
     public static final String currDir = System.getProperty("user.dir");
+    public static String localAppSqs;
 
     // todo - If a worker stops working unexpectedly before finishing its work on a message, then some other worker should be able to handle that message.
     public static void main(String[] args) throws IOException, ParserConfigurationException {
@@ -38,53 +40,59 @@ public class WorkerMain {
 
         S3Adapter s3Adapter = new S3Adapter();
         SQSAdapter sqsAdapter = new SQSAdapter();
+
         List<Message> messages = new ArrayList<>();
         while (true) {
             do {
-                messages = sqsAdapter.retrieveOneMessage(inputQueueUrl);
+                messages = sqsAdapter.retrieveMessage(inputQueueUrl, 1, 20);
             } while (messages.isEmpty());
             String fileDir = null;
             Message m = messages.get(0);
             String[] data = m.body().split(",");
             String url = data[0];
             String action = data[1];
+            localAppSqs = data[2];
             try {
                 fileDir = handleMessage(url, action, sqsAdapter, outputQueueUrl);
                 if (fileDir == "no such commend") {
-                    sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",do not support " + action);
+                    sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",do not support " + action + "," + localAppSqs + ",fail");
                 } else if (fileDir == "could not download the file") {
                     continue;
                 } else {
                     String key = fileDir;
                     s3Adapter.putFileInBucketFromPath(bucketName, key, fileDir);
-                    sqsAdapter.sendMessage(outputQueueUrl, url + "," + key + "," + bucketName + "," + action);
+                    sqsAdapter.sendMessage(outputQueueUrl, String.format("%s,%s,%s,%s,%s", url, key, localAppSqs, action, "success"));
                     File f = new File(fileDir + "\\downloadPDFFIle.pdf");
                     f.delete();
                 }
 
             } catch (Exception e) {
-                sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",has failed duo to ParserConfigurationException or IOException");
+                sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",has failed duo to ParserConfigurationException or IOException," + localAppSqs + ",fail");
             }
             sqsAdapter.deleteMessage(messages, inputQueueUrl);
         }
-
-
     }
 
     private static int saveFileFromUrlWithJavaIO(String fileName, String fileUrl)
             throws MalformedURLException, IOException {
-        BufferedInputStream in = null;
-        FileOutputStream fout = null;
+        InputStream is = null;
+        OutputStream os = null;
         try {
-            in = new BufferedInputStream(new URL(fileUrl).openStream());
-            fout = new FileOutputStream(fileName);
+            URL url = new URL(fileUrl);
+            // connection to the file
+            URLConnection connection = url.openConnection();
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11");
+            // get input stream to the file
+            is = connection.getInputStream();
+            // get output stream to download file
+            os = new FileOutputStream(fileName);
 
-            byte data[] = new byte[1024];
-            int count;
-            while ((count = in.read(data, 0, 1024)) != -1) {
-                fout.write(data, 0, count);
+            byte b[] = new byte[2048];
+            int length;
+            // read from input stream and write to output stream
+            while ((length = is.read(b)) != -1) {
+                os.write(b, 0, length);
             }
-
         } catch (MalformedURLException e) {
             return MALFORMED_URL_EXCEPTION;
 
@@ -92,22 +100,24 @@ public class WorkerMain {
             return IO_Exception;
 
         } finally {
-            if (in != null)
-                in.close();
-            if (fout != null)
-                fout.close();
+            if (is != null)
+                is.close();
+            if (os != null)
+                os.close();
         }
         return SUCCESS_TO_DOWONLOAD;
     }
 
-    private static String handleMessage(String url, String action, SQSAdapter sqsAdapter, String outputQueueUrl) throws IOException, ParserConfigurationException {
+    private static String handleMessage(String url, String action, SQSAdapter sqsAdapter, String outputQueueUrl) throws
+            IOException, ParserConfigurationException {
         String dirName = "";
-        if (saveFileFromUrlWithJavaIO(currDir + "\\downloadPDFFIle.pdf", url) == MALFORMED_URL_EXCEPTION) {
-            sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ":the url is malformed"); //todo is that the queue-url?
+        int ack = saveFileFromUrlWithJavaIO(currDir + "\\downloadPDFFIle.pdf", url);
+        if (ack == MALFORMED_URL_EXCEPTION) {
+            sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ":the url is malformed," + localAppSqs + ",fail"); //todo is that the queue-url?
             return "could not download the file";
 
-        } else if (saveFileFromUrlWithJavaIO(currDir + "\\downloadPDFFIle.pdf", url) == IO_Exception) {
-            sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ":IOException has happened"); //todo is that the queue-url?
+        } else if (ack == IO_Exception) {
+            sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ":IOException has happened," + localAppSqs + ",fail"); //todo is that the queue-url?
             return "could not download the file";
         }
         switch (action) {
