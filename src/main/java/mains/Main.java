@@ -15,9 +15,9 @@ import java.util.stream.Collectors;
 
 
 public class Main {
-    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYH2CRXJSY";
-    public static final String AWS_SECRET_ACCESS_KEY = "h71/CcCZTk28uTSj9qvkZUkr4MiLltoUigExx7oP";
-    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEAsaDP9O3xO4Bb/ZouDCaiLIAYxZMNaCZU3wO1iAQPIVvnPij2Up3M5sEn90DNPeuKboJEJaqG1S622tibivkbHDqPHgs2JgmjD4rCbbGiZQl2St9ywA9MDbH7oP0iMpOCOKNE90JVgxYYIgS2tmhmyg/gqejpngO/RZ9T0ASlFPknEU/Sc6NXUWHhIjoe6Bip3kfMqphNOX3d26c8g48a8otYWEtaa8cozZPG07Jwv0Cbz+Kwm8TYV5bIxOXDteu/vHZzBFOSrqctigtJmgDAFzQbmTS8i+qtXWKKiAj40GMi0dCGPdabPbBqJ8ePhzNMezaLr4o3u9WQRCnz4/glw8F5yG7bBoeBD9GtMBlm0=+RpU03KH8qMamufhenM9hxoTUXPNwU5YW9owSM5M9jNYlhzjcQCaB1yLIgiDx10usibnVoh/RpRhCjCt46NBjItFYPSPwwSCu8jHZKo05FbtSQmM9RWXP4dzTJjTrq7MAuDg6g5/RGU5TFKcx9l";
+    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYE5PEXOGQ";
+    public static final String AWS_SECRET_ACCESS_KEY = "hCdxaE5HlkT9K0OkS8zmK4/Q2OFIy/1mAtNKIwg1";
+    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEHkaDCEW7UUbIjEjBdbuICLIAQC250eG8GOSM9kwqdqUZF7aTaYQ9iGjsz1DPu5E/4TkU8cGOsxUobhQ2otg5KkjoV38LTFHSuh5lZLxcF7YpPoOFEuHhh5X4agj9RqMGh7hlh2cEp0Tf7WqBzVyaXL+bEZ4q8vPYvxQ4ofx8UZwiUu7bFM8ggUiil6avfDZQjO1KHf2LJgbknTVK9gY4liKnE75SWOGXgmkR6QkHwsDsZuzyVWUENEvOJLCRJHBnqnruj+hOZlYKbn0oTP/7TQdwVo11DOFcueqKPqGp40GMi3OMyIOSlITectKlEd816aFcYQ75mX4OWxhkEYUQsUvlhV7GYtdeBzSHgeLLvA=";
     public static final String programSqsUrl = "https://sqs.us-east-1.amazonaws.com/826355905904/program-queue";
     public static final String programBucketName = "program-bucket-28031995";
     private static final Integer RUNNING = 16;
@@ -63,6 +63,8 @@ public class Main {
 
         while (!finished) {
             List<Message> messages = sqsAdapter.retrieveMessage(queueUrl, 1, 20);
+            StringBuilder summary = new StringBuilder();
+            summary.append("<dif><p>");
             if (!messages.isEmpty()) {
                 BufferedReader buffer = s3Adapter.getObject(Main.programBucketName, messages.get(0).body());
                 List<String> lines = buffer.lines().collect(Collectors.toList());
@@ -70,8 +72,10 @@ public class Main {
                 try {
                     BufferedWriter bw = new BufferedWriter(new FileWriter(outputFile));
                     for (String line : lines) {
-                        bw.write(line);
+                        summary.append(line);
                     }
+                    summary.append("</p></dif>");
+                    bw.write(summary.toString());
                     finished = true;
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -118,10 +122,10 @@ public class Main {
         commands += "export AWS_SESSION_TOKEN=" + AWS_SESSION_TOKEN + "\n";
 
         // get jar from s3 bucket
-        commands += "aws s3 cp s3://program-bucket-28031995/PDF_HANDLER.jar /home/ec2-user/\n";
+        commands += "aws s3 cp s3://program-bucket-28031995/PDF_HANDLER_MANAGER.jar /home/ec2-user/\n";
 
         // run java
-        commands += "java -jar /home/ec2-user/PDF_HANDLER.jar\n";
+        commands += "java -jar /home/ec2-user/PDF_HANDLER_MANAGER.jar\n";
         commands += "echo 'Woot!' > /home/ec2-user/user-script-output.txt\n";//TODO: delete
         return Base64.getEncoder().encodeToString(commands.getBytes(StandardCharsets.UTF_8));
     }

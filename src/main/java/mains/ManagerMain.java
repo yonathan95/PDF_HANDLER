@@ -25,6 +25,9 @@ public class ManagerMain {
     private static List<String> workers = new ArrayList<>();
 
     public static void main(String[] args) throws FileNotFoundException { //params 0: local-app sqsUrl, params 1: n, params 2: bucket name
+        System.setProperty("aws.accessKeyId", Main.AWS_ACCESS_KEY_ID);
+        System.setProperty("aws.secretAccessKey", Main.AWS_SECRET_ACCESS_KEY);
+        System.setProperty("aws.sessionToken", Main.AWS_SESSION_TOKEN);
         boolean terminated = false;
         CreateQueueResponse inputQueue = sqsAdapter.createQueue("workers-input-queue");
         workersInputQueueUrl = inputQueue.queueUrl();
@@ -45,14 +48,17 @@ public class ManagerMain {
                     if (messageData.length == 4) terminated = true;
                     localAppsMap.put(localAppSqs, new HashSet<>());
                     startLocalAppRequest(inputFileKey, localAppSqs, n);
+                    sqsAdapter.deleteMessage(messages, Main.programSqsUrl);
                 }
             }
 
-            List<Message> workersMessages = sqsAdapter.retrieveMessage(Main.programSqsUrl, 10, 1);
+            List<Message> workersMessages = sqsAdapter.retrieveMessage(workersOutputQueueUrl, 10, 1);
             for (Message message : workersMessages) {
                 //add implementation
                 handleWorkerMessage(message);
             }
+            sqsAdapter.deleteMessage(workersMessages, workersOutputQueueUrl);
+
 
             for (Map.Entry<String, HashSet<String>> localApp : localAppsMap.entrySet()) {
                 if (localApp.getValue().size() == approxWorkCount.get(localApp.getKey())) {
@@ -63,7 +69,7 @@ public class ManagerMain {
             }
 
             if (terminated && approxWorkCount.isEmpty()) {
-                terminate();
+                //terminate();
                 break;
             }
         }
@@ -74,7 +80,7 @@ public class ManagerMain {
         for (String line : localApp.getValue()) {
             summary += line + "\n";
         }
-        String key = String.format("summary-%s", localApp.getKey());
+        String key = String.format("summary-%s", "1");
         try {
             s3Adapter.putFileInBucketFromBytes(Main.programBucketName, key, summary.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
@@ -92,7 +98,7 @@ public class ManagerMain {
                 String localAppUrl = workerMessageData[2];
                 String action = workerMessageData[3];
                 String newUrl = String.format("https://%s.s3.us-west-2.amazonaws.com/%s", Main.programBucketName, key);
-                localAppsMap.get(localAppUrl).add("<dif><p>" + action + "\t" + origUrl + "\t" + newUrl + "\n</p></dif>");
+                localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + newUrl + "\n");
                 break;
             }
             default: {
@@ -100,7 +106,7 @@ public class ManagerMain {
                 String origUrl = workerMessageData[1];
                 String whyFail = workerMessageData[2];
                 String localAppUrl = workerMessageData[3];
-                localAppsMap.get(localAppUrl).add("<dif><p>" + action + "\t" + origUrl + "\t" + whyFail + "\n</p></dif>");
+                localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + whyFail + "\n");
                 break;
             }
         }
@@ -132,6 +138,7 @@ public class ManagerMain {
         List<Instance> openInstances = ec2Adapter.describeEC2Instances().stream().filter(i -> i.state().code().intValue() != 43).collect(Collectors.toList());
         int maxNumberOfWorkers = 10 - openInstances.size();
         for (int i = 0; i < Math.min(maxNumberOfWorkers, Math.ceil(lines.size() / n)); i++) {
+            System.out.println(workersInputQueueUrl + " " + workersOutputQueueUrl + " " + Main.programBucketName);
             String userData = getRunShellCommands(workersInputQueueUrl, workersOutputQueueUrl, Main.programBucketName);
             String workerId = ec2Adapter.createEC2Instance(String.format("worker-%s", i), userData);
             workers.add(workerId);
@@ -153,9 +160,10 @@ public class ManagerMain {
 
         //create credentials file
         commands += "echo [default] > /home/ec2-user/.aws/credentials\n";
-        commands += "echo aws_access_key_id=ASIAYVIKYYUPXEAS2NWE >> /home/ec2-user/.aws/credentials\n";
-        commands += "echo aws_secret_access_key=/P2nmHqtx6J/MuWuSph/gAU3HKdZZ+NztdzsoyFH >> /home/ec2-user/.aws/credentials\n";
-        commands += "echo aws_session_token=FwoGZXIvYXdzEHgaDAUlc64uoRx75t547SLGAa2Z5KaIf/nMXw9WrFgiTlL0sV9xKiH2YyMVSZtRaqvlcXiK7+etZfyJttFrcrKPHYWn/jlVcQqEcVa/MGU40G1eDIpkHk5Eg7SQOgo8pD0xviyzLcqQ77cmaY0E8dZExRwJHxCcQp+1mJ641sAPi4pAViV6xxakEMj7iwtA9WHEhPMD4k1RSVdkjD9qpGkOWVe2hLKm+tlV2pMtGQFzWBO7LuSG85FVxAvAL3WrfZ5rKgwUGN4EtOx+Vv4ZBpCek9ZOvzxlTCiS0+6MBjItTdQrHJ3UWxhhzfFO+j674pxIUIxmcbpuxy6IciWlJhtn9PqUQNS5nHnPgnSJ >> /home/ec2-user/.aws/credentials\n";
+        commands += "echo aws_access_key_id=" + Main.AWS_ACCESS_KEY_ID + " >> /home/ec2-user/.aws/credentials\n";
+        commands += "echo aws_secret_access_key=" + Main.AWS_SECRET_ACCESS_KEY + " >> /home/ec2-user/.aws/credentials\n";
+        commands += "echo aws_session_token=" + Main.AWS_SESSION_TOKEN + " >> /home/ec2-user/.aws/credentials\n";
+
         commands += "aws configure set AWS_ACCESS_KEY_ID " + Main.AWS_ACCESS_KEY_ID + "\n";
         commands += "aws configure set AWS_SECRET_ACCESS_KEY " + Main.AWS_SECRET_ACCESS_KEY + "\n";
         commands += "aws configure set AWS_SESSION_TOKEN " + Main.AWS_SESSION_TOKEN + "\n";

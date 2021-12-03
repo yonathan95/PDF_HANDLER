@@ -3,7 +3,7 @@ package mains;
 import adapters.S3Adapter;
 import adapters.SQSAdapter;
 import org.apache.pdfbox.cos.COSDocument;
-import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.RandomAccessFile;
 import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -19,7 +19,9 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLConnection;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -47,63 +49,51 @@ public class WorkerMain {
                 messages = sqsAdapter.retrieveMessage(inputQueueUrl, 1, 20);
             } while (messages.isEmpty());
             String fileDir = null;
+
             Message m = messages.get(0);
             String[] data = m.body().split(",");
             String url = data[0];
             String action = data[1];
             localAppSqs = data[2];
+
             try {
                 fileDir = handleMessage(url, action, sqsAdapter, outputQueueUrl);
-                if (fileDir == "no such commend") {
+                if (fileDir == "no such command") {
                     sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",do not support " + action + "," + localAppSqs + ",fail");
                 } else if (fileDir == "could not download the file") {
-                    continue;
+                    sqsAdapter.deleteMessage(messages, inputQueueUrl);
                 } else {
-                    String key = fileDir;
+                    String key = "key" + fileDir;
                     s3Adapter.putFileInBucketFromPath(bucketName, key, fileDir);
                     sqsAdapter.sendMessage(outputQueueUrl, String.format("%s,%s,%s,%s,%s", url, key, localAppSqs, action, "success"));
-                    File f = new File(fileDir + "\\downloadPDFFIle.pdf");
+                    File f = new File(fileDir);
                     f.delete();
                 }
 
             } catch (Exception e) {
+                e.printStackTrace();
                 sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",has failed duo to ParserConfigurationException or IOException," + localAppSqs + ",fail");
             }
             sqsAdapter.deleteMessage(messages, inputQueueUrl);
         }
     }
 
-    private static int saveFileFromUrlWithJavaIO(String fileName, String fileUrl)
-            throws MalformedURLException, IOException {
-        InputStream is = null;
-        OutputStream os = null;
+    private static int saveFileFromUrlWithJavaIO(String fileName, String fileUrl) {
         try {
-            URL url = new URL(fileUrl);
-            // connection to the file
-            URLConnection connection = url.openConnection();
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11");
-            // get input stream to the file
-            is = connection.getInputStream();
-            // get output stream to download file
-            os = new FileOutputStream(fileName);
+            ReadableByteChannel readChannel = Channels.newChannel(new URL(fileUrl).openStream());
+            FileOutputStream fileOS = new FileOutputStream(fileName);
+            FileChannel writeChannel = fileOS.getChannel();
+            writeChannel
+                    .transferFrom(readChannel, 0, Long.MAX_VALUE);
 
-            byte b[] = new byte[2048];
-            int length;
-            // read from input stream and write to output stream
-            while ((length = is.read(b)) != -1) {
-                os.write(b, 0, length);
-            }
         } catch (MalformedURLException e) {
+            e.printStackTrace();
             return MALFORMED_URL_EXCEPTION;
 
         } catch (IOException e) {
+            e.printStackTrace();
             return IO_Exception;
 
-        } finally {
-            if (is != null)
-                is.close();
-            if (os != null)
-                os.close();
         }
         return SUCCESS_TO_DOWONLOAD;
     }
@@ -111,29 +101,31 @@ public class WorkerMain {
     private static String handleMessage(String url, String action, SQSAdapter sqsAdapter, String outputQueueUrl) throws
             IOException, ParserConfigurationException {
         String dirName = "";
-        int ack = saveFileFromUrlWithJavaIO(currDir + "\\downloadPDFFIle.pdf", url);
+        int ack = saveFileFromUrlWithJavaIO(currDir + "/downloadPDFFIle.pdf", url);
         if (ack == MALFORMED_URL_EXCEPTION) {
-            sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ":the url is malformed," + localAppSqs + ",fail"); //todo is that the queue-url?
+            sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",the url is malformed," + localAppSqs + ",fail"); //todo is that the queue-url?
             return "could not download the file";
 
         } else if (ack == IO_Exception) {
-            sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ":IOException has happened," + localAppSqs + ",fail"); //todo is that the queue-url?
+            sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",IOException has happened," + localAppSqs + ",fail"); //todo is that the queue-url?
             return "could not download the file";
         }
         switch (action) {
             case "ToImage":
-                dirName = toImage(currDir + "\\downloadPDFFIle.pdf");
+                dirName = toImage(currDir + "/downloadPDFFIle.pdf");
                 break;
             case "ToHTML":
-                dirName = toHTML(currDir + "\\downloadPDFFIle.pdf");
+                dirName = toHTML(currDir + "/downloadPDFFIle.pdf");
                 break;
             case "ToText":
-                dirName = toText(currDir + "\\downloadPDFFIle.pdf");
+                dirName = toText(currDir + "/downloadPDFFIle.pdf");
                 break;
             default:
-                dirName = "no such commend";
+                dirName = "no such command";
                 break;
         }
+        File f = new File(currDir + "/downloadPDFFIle.pdf");
+        f.delete();
         return dirName;
     }
 
@@ -167,7 +159,7 @@ public class WorkerMain {
     private static String toText(String fileName) throws IOException {
         File f = new File(fileName);
         String parsedText;
-        PDFParser parser = new PDFParser((RandomAccessRead) new RandomAccessFile(f, "r"));
+        PDFParser parser = new PDFParser(new RandomAccessFile(f, "r"));
         parser.parse();
         COSDocument cosDoc = parser.getDocument();
         PDFTextStripper pdfStripper = new PDFTextStripper();

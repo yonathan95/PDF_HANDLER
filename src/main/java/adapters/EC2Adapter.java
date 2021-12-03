@@ -7,6 +7,8 @@ import software.amazon.awssdk.services.ec2.model.*;
 import java.util.ArrayList;
 import java.util.List;
 
+import static java.lang.Thread.sleep;
+
 public class EC2Adapter {
 
     private Ec2Client ec2 = Ec2Client.create();
@@ -34,7 +36,11 @@ public class EC2Adapter {
 
         RunInstancesResponse response = ec2.runInstances(runRequest);
         String instanceId = response.instances().get(0).instanceId();
-
+        try {
+            sleep(2000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         Tag tag = Tag.builder()
                 .key("Name")
                 .value(name)
