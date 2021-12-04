@@ -33,6 +33,14 @@ public class SQSAdapter {
         return sqsClient.createQueue(createQueueRequest);
     }
 
+    public DeleteQueueResponse removeQueue(String queueUrl) {
+        DeleteQueueRequest deleteQueueRequest = DeleteQueueRequest.builder()
+                .queueUrl(queueUrl)
+                .build();
+
+        return sqsClient.deleteQueue(deleteQueueRequest);
+    }
+
     public SendMessageResponse sendMessage(String queueUrl, String body) {
         return sqsClient.sendMessage(SendMessageRequest.builder()
                 .queueUrl(queueUrl)

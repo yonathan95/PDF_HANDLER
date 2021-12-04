@@ -11,7 +11,7 @@ import static java.lang.Thread.sleep;
 
 public class EC2Adapter {
 
-    private Ec2Client ec2 = Ec2Client.create();
+    private Ec2Client ec2;
 
     public EC2Adapter() {
         ec2 = Ec2Client.builder().credentialsProvider(DefaultCredentialsProvider.create()).build();
@@ -21,7 +21,7 @@ public class EC2Adapter {
 
 
         String amiId = "ami-04ad2567c9e3d7893";
-        List<String> securityGroupIds = new ArrayList();
+        List<String> securityGroupIds = new ArrayList<>();
         securityGroupIds.add("sg-067f67df6351d14ad");
 
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
@@ -57,36 +57,11 @@ public class EC2Adapter {
 
     }
 
-    public StartInstancesResponse startInstance(String instanceId) {
-
-        StartInstancesRequest request = StartInstancesRequest.builder()
-                .instanceIds(instanceId)
-                .build();
-
-        return ec2.startInstances(request);
-    }
-
-    public StopInstancesResponse stopInstance(String instanceId) {
-
-        StopInstancesRequest request = StopInstancesRequest.builder()
-                .instanceIds(instanceId)
-                .build();
-
-        return ec2.stopInstances(request);
-    }
-
-    public RebootInstancesResponse rebootEC2Instance(String instanceId) {
-        RebootInstancesRequest request = RebootInstancesRequest.builder()
-                .instanceIds(instanceId)
-                .build();
-        return ec2.rebootInstances(request);
-    }
-
-    public TerminateInstancesResponse terminateEC2Instance(String instanceId) {
+    public void terminateEC2Instance(String instanceId) {
         TerminateInstancesRequest request = TerminateInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
-        return ec2.terminateInstances(request);
+        ec2.terminateInstances(request);
     }
 
     public List<Instance> describeEC2Instances() {
@@ -94,13 +69,14 @@ public class EC2Adapter {
         DescribeInstancesResponse response = null;
         Ec2Client ec2 = Ec2Client.create();
         try {
-            DescribeInstancesRequest request = DescribeInstancesRequest.builder().maxResults(6).nextToken(null).build();
+            DescribeInstancesRequest request = DescribeInstancesRequest.builder().build();
             response = ec2.describeInstances(request);
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
 
 
+        assert response != null;
         for (Reservation res : response.reservations()) {
             instances.addAll(res.instances());
         }

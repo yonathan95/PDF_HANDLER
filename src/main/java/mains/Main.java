@@ -16,12 +16,12 @@ import java.util.stream.Collectors;
 
 
 public class Main {
-    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYBNNINVM5";
-    public static final String AWS_SECRET_ACCESS_KEY = "4XsqmWw24CYTG1CLZpsMjVzqm7XjrABEaOBdzCXb";
-    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEJD//////////wEaDGFtFa0UudJIzdQz3yLIAbNmjRU/9jhL86BnDA/+75FfAvlNmJyUAOBc2c+26AODnslDZ/8eCRHQZxAtXcHmzAG7WAsqFnhrBLbvCyj0ah/CH/rdSbHfFYfcguCUtQfNlC0KS17vxl9vdkrlGscP5STTN74K2CxNAvRf/2X6AphCk2izAWKjSOMcTRLsc2Hy1gL9m1kl4JgCOI9xXAnX5RkXuAugMe9zX1h5cqrcQC7NMwLspjwC1HBJbhXaU7m/YPqne8G8iuOcpPTqZdfFqewbqDYZIb5VKNujrI0GMi1cfEvCe6BDn6jiD0Vy3dE+MtEWX5seGxdbxkketfx/9o9XiXYF/pD+7pOPBA8=";
+    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYKKXXYKSD";
+    public static final String AWS_SECRET_ACCESS_KEY = "YlpcR+I5JlSJJtrOrzkrBXmK0YsT50Bj9mtnjqQc";
+    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEJT//////////wEaDEE2frqwpk5HNrh3GSLIAWWl1qDuqv4Wid+e45WHUKk9rQ7ASpqaMbg0emNOJbhk3zGFyw+7YLjvdPKNIMg7kXr2isrvCskbY5c7H8Y+k/tthHC0Oxs2MyB/aA+y0SRVLe+hc2q6J2L2Lme1j/MR5TzcR9Pt4BDnR5Y52GfRrrOuE5tYAIrFFt+W46etkgubmi+NIKPhVnzoUQ/pgJsiM1oY+xpw+aPNZL+M6R2eH4IM6NrFLKgkWNkcLFzXhuff+saJhUGSjgR4Ec0Gg7mKFycilAcYRzy4KLiVrY0GMi2BleY4wCa+4bMTNWaMQbDf9kifSo8VdAFEVlVupSxYVi//Wm0Crmp0YrrUyfk=";
     public static final String programSqsUrl = "https://sqs.us-east-1.amazonaws.com/826355905904/program-queue";
     public static final String programBucketName = "program-bucket-28031995";
-    private static final Integer RUNNING = 16;
+    public static final Integer RUNNING = 16;
     private static final String MANAGER_NODE_NAME = "ManagerNode";
     private static final EC2Adapter ec2Adapter = new EC2Adapter();
     private static final S3Adapter s3Adapter = new S3Adapter();
@@ -73,7 +73,7 @@ public class Main {
                 try {
                     BufferedWriter bw = new BufferedWriter(new FileWriter(outputFile));
                     for (String line : lines) {
-                        summary.append("<dif><p>" + line + "</p></dif>");
+                        summary.append("<dif><p>").append(line).append("</p></dif>");
                     }
                     summary.append("</html>");
                     bw.write(summary.toString());
@@ -84,11 +84,12 @@ public class Main {
                 }
             }
         }
+        sqsAdapter.removeQueue(queueUrl);
     }
 
     private static boolean isManagerRunning() {
         List<Instance> instances = ec2Adapter.describeEC2Instances();
-        List<String> runningInstancesNames = instances.stream().filter(i -> (i.state().code() == RUNNING)).map(i -> i.tags().get(0).value()).collect(Collectors.toList());
+        List<String> runningInstancesNames = instances.stream().filter(i -> (i.state().code().equals(RUNNING))).map(i -> i.tags().get(0).value()).collect(Collectors.toList());
         return !runningInstancesNames.isEmpty() && runningInstancesNames.contains("ManagerNode");
     }
 

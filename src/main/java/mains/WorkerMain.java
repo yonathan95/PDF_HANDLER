@@ -34,8 +34,7 @@ public class WorkerMain {
     public static final String currDir = System.getProperty("user.dir");
     public static String localAppSqs;
 
-    // todo - If a worker stops working unexpectedly before finishing its work on a message, then some other worker should be able to handle that message.
-    public static void main(String[] args) throws IOException, ParserConfigurationException {
+    public static void main(String[] args) {
         String inputQueueUrl = args[0];
         String outputQueueUrl = args[1];
         String bucketName = args[2];
@@ -62,9 +61,9 @@ public class WorkerMain {
 
             try {
                 fileDir = handleMessage(url, action, sqsAdapter, outputQueueUrl);
-                if (fileDir == "no such command") {
+                if (fileDir.equals("no such command")) {
                     sqsAdapter.sendMessage(outputQueueUrl, action + "," + url + ",do not support " + action + "," + localAppSqs + ",fail");
-                } else if (fileDir == "could not download the file") {
+                } else if (fileDir.equals("could not download the file")) {
                     sqsAdapter.deleteMessage(messages, inputQueueUrl);
                 } else {
                     String key = "key" + fileDir.replace("//", "/");
@@ -94,13 +93,10 @@ public class WorkerMain {
             e.printStackTrace();
             return MALFORMED_URL_EXCEPTION;
 
-        } catch (IOException e) {
-            e.printStackTrace();
-            return IO_Exception;
-
         } catch (Exception e) {
             e.printStackTrace();
             return IO_Exception;
+
         }
         return SUCCESS_TO_DOWONLOAD;
     }

@@ -9,7 +9,6 @@ import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 
 import java.io.BufferedReader;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -21,13 +20,13 @@ public class ManagerMain {
     private static final EC2Adapter ec2Adapter = new EC2Adapter();
     private static final S3Adapter s3Adapter = new S3Adapter();
     private static final SQSAdapter sqsAdapter = new SQSAdapter();
+    private static final HashMap<String, HashSet<String>> approxWorkCount = new HashMap<>();
+    private static final HashMap<String, HashSet<String>> localAppsMap = new HashMap<>();
+    private static final List<String> workers = new ArrayList<>();
     private static String workersInputQueueUrl;
     private static String workersOutputQueueUrl;
-    private static HashMap<String, HashSet<String>> approxWorkCount = new HashMap<>();
-    private static HashMap<String, HashSet<String>> localAppsMap = new HashMap<>();
-    private static List<String> workers = new ArrayList<>();
 
-    public static void main(String[] args) throws FileNotFoundException { //params 0: local-app sqsUrl, params 1: n, params 2: bucket name
+    public static void main(String[] args) {
         System.setProperty("aws.accessKeyId", Main.AWS_ACCESS_KEY_ID);
         System.setProperty("aws.secretAccessKey", Main.AWS_SECRET_ACCESS_KEY);
         System.setProperty("aws.sessionToken", Main.AWS_SESSION_TOKEN);
@@ -36,8 +35,7 @@ public class ManagerMain {
         workersInputQueueUrl = inputQueue.queueUrl();
         CreateQueueResponse outputQueue = sqsAdapter.createQueue("workers-output-queue");
         workersOutputQueueUrl = outputQueue.queueUrl();
-        int printHelp = 0;
-
+        List<String> toRemove = new ArrayList<>();
 
         while (true) {
             if (!terminated) {
@@ -64,35 +62,40 @@ public class ManagerMain {
 
             for (Map.Entry<String, HashSet<String>> localApp : localAppsMap.entrySet()) {
                 if (approxWorkCount.containsKey(localApp.getKey()) && (localApp.getValue().size() == approxWorkCount.get(localApp.getKey()).size())) {
-                    System.out.println("summarizing");
                     summarizeWork(localApp);
-                    localAppsMap.remove(localApp.getKey());
-                    approxWorkCount.remove(localApp.getKey());
-                } else {
-                    printHelp += 1;
-                    if (printHelp == 50) {
-                        printHelp = 0;
-                        System.out.println("files done: " + localApp.getValue().size() + " expected: " + approxWorkCount.get(localApp.getKey()).size());
-                    }
+                    toRemove.add(localApp.getKey());
                 }
+            }
+
+            for (String localAppQueue : toRemove) {
+                localAppsMap.remove(localAppQueue);
+                approxWorkCount.remove(localAppQueue);
             }
 
             if (terminated && localAppsMap.isEmpty()) {
                 terminate();
+                sqsAdapter.removeQueue(workersInputQueueUrl);
+                sqsAdapter.removeQueue(workersOutputQueueUrl);
+                selfDestruct();
                 break;
             }
         }
     }
 
+    private static void selfDestruct() {
+        List<Instance> instances = ec2Adapter.describeEC2Instances();
+        instances.stream().filter(i -> (i.state().code().equals(Main.RUNNING)) && (i.tags().get(0).value().equals("ManagerNode"))).map(Instance::instanceId).forEach(ec2Adapter::terminateEC2Instance);
+    }
+
 
     private static void summarizeWork(Map.Entry<String, HashSet<String>> localApp) {
-        String summary = "";
+        StringBuilder summary = new StringBuilder();
         for (String line : localApp.getValue()) {
-            summary += line + "\n";
+            summary.append(line).append("\n");
         }
         String key = String.format("summary-%s", currentTimeMillis());
         try {
-            s3Adapter.putFileInBucketFromBytes(Main.programBucketName, key, summary.getBytes(StandardCharsets.UTF_8));
+            s3Adapter.putFileInBucketFromBytes(Main.programBucketName, key, summary.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -101,24 +104,19 @@ public class ManagerMain {
 
     private static void handleWorkerMessage(Message message) {
         String[] workerMessageData = message.body().split(",");
-        switch (workerMessageData[4]) {
-            case "success": {
-                String origUrl = workerMessageData[0];
-                String key = workerMessageData[1];
-                String localAppUrl = workerMessageData[2];
-                String action = workerMessageData[3];
-                String newUrl = String.format("https://%s.s3.us-west-2.amazonaws.com/%s", Main.programBucketName, key);
-                localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + newUrl + "\n");
-                break;
-            }
-            default: {
-                String action = workerMessageData[0];
-                String origUrl = workerMessageData[1];
-                String whyFail = workerMessageData[2];
-                String localAppUrl = workerMessageData[3];
-                localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + whyFail + "\n");
-                break;
-            }
+        if ("success".equals(workerMessageData[4])) {
+            String origUrl = workerMessageData[0];
+            String key = workerMessageData[1];
+            String localAppUrl = workerMessageData[2];
+            String action = workerMessageData[3];
+            String newUrl = String.format("https://%s.s3.us-west-2.amazonaws.com/%s", Main.programBucketName, key);
+            localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + newUrl + "\n");
+        } else {
+            String action = workerMessageData[0];
+            String origUrl = workerMessageData[1];
+            String whyFail = workerMessageData[2];
+            String localAppUrl = workerMessageData[3];
+            localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + whyFail + "\n");
         }
     }
 
@@ -146,16 +144,16 @@ public class ManagerMain {
         approxWorkCount.put(localAppSqs, linesSet);
 
         //create workers
-        List<Instance> openInstances = ec2Adapter.describeEC2Instances().stream().filter(i -> i.state().code().intValue() != 43).collect(Collectors.toList());
+        List<Instance> openInstances = ec2Adapter.describeEC2Instances().stream().filter(i -> i.state().code() != 48).collect(Collectors.toList());
         int maxNumberOfWorkers = 10 - openInstances.size();
         for (int i = 0; i < Math.min(maxNumberOfWorkers, Math.ceil(lines.size() / n)); i++) {
-            String userData = getRunShellCommands(workersInputQueueUrl, workersOutputQueueUrl, Main.programBucketName);
+            String userData = getRunShellCommands(workersInputQueueUrl, workersOutputQueueUrl);
             String workerId = ec2Adapter.createEC2Instance(String.format("worker-%s", i), userData, InstanceType.T2_MICRO);
             workers.add(workerId);
         }
     }
 
-    private static String getRunShellCommands(String inputSqsUrl, String outputSqsUrl, String bucketName) {
+    private static String getRunShellCommands(String inputSqsUrl, String outputSqsUrl) {
         String commands = "";
         commands += "#!/bin/bash\n";
         // install java
@@ -184,7 +182,7 @@ public class ManagerMain {
         // get jar from s3 bucket
         commands += "aws s3 cp s3://program-bucket-28031995/PDF_HANDLER_WORKER.jar /home/ec2-user/\n";
         // run java
-        commands += String.format("java -jar /home/ec2-user/PDF_HANDLER_WORKER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, bucketName);
+        commands += String.format("java -jar /home/ec2-user/PDF_HANDLER_WORKER.jar %s %s %s\n", inputSqsUrl, outputSqsUrl, Main.programBucketName);
         commands += "echo 'Woot!' > /home/ec2-user/user-script-output.txt\n";
         return Base64.getEncoder().encodeToString(commands.getBytes(StandardCharsets.UTF_8));
     }
