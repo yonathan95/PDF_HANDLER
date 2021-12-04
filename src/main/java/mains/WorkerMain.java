@@ -53,6 +53,10 @@ public class WorkerMain {
             Message m = messages.get(0);
             String[] data = m.body().split(",");
             String url = data[0];
+            if (!url.contains("https")) {
+                url = url.replace("http", "https");
+            }
+
             String action = data[1];
             localAppSqs = data[2];
 
@@ -63,7 +67,7 @@ public class WorkerMain {
                 } else if (fileDir == "could not download the file") {
                     sqsAdapter.deleteMessage(messages, inputQueueUrl);
                 } else {
-                    String key = "key" + fileDir;
+                    String key = "key" + fileDir.replace("//", "/");
                     s3Adapter.putFileInBucketFromPath(bucketName, key, fileDir);
                     sqsAdapter.sendMessage(outputQueueUrl, String.format("%s,%s,%s,%s,%s", url, key, localAppSqs, action, "success"));
                     File f = new File(fileDir);
@@ -94,6 +98,9 @@ public class WorkerMain {
             e.printStackTrace();
             return IO_Exception;
 
+        } catch (Exception e) {
+            e.printStackTrace();
+            return IO_Exception;
         }
         return SUCCESS_TO_DOWONLOAD;
     }

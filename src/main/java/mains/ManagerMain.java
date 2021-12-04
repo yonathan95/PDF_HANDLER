@@ -4,6 +4,7 @@ import adapters.EC2Adapter;
 import adapters.S3Adapter;
 import adapters.SQSAdapter;
 import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceType;
 import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 
@@ -14,13 +15,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static java.lang.System.currentTimeMillis;
+
 public class ManagerMain {
     private static final EC2Adapter ec2Adapter = new EC2Adapter();
     private static final S3Adapter s3Adapter = new S3Adapter();
     private static final SQSAdapter sqsAdapter = new SQSAdapter();
     private static String workersInputQueueUrl;
     private static String workersOutputQueueUrl;
-    private static HashMap<String, Integer> approxWorkCount = new HashMap<>();
+    private static HashMap<String, HashSet<String>> approxWorkCount = new HashMap<>();
     private static HashMap<String, HashSet<String>> localAppsMap = new HashMap<>();
     private static List<String> workers = new ArrayList<>();
 
@@ -33,54 +36,61 @@ public class ManagerMain {
         workersInputQueueUrl = inputQueue.queueUrl();
         CreateQueueResponse outputQueue = sqsAdapter.createQueue("workers-output-queue");
         workersOutputQueueUrl = outputQueue.queueUrl();
+        int printHelp = 0;
 
 
         while (true) {
-            //listen to new work
             if (!terminated) {
                 List<Message> messages = sqsAdapter.retrieveOneMessage(Main.programSqsUrl);
                 if (!messages.isEmpty()) {
-                    //handle new job
                     String[] messageData = messages.get(0).body().split(",");
                     String inputFileKey = messageData[0];
                     String localAppSqs = messageData[1];
                     int n = Integer.parseInt(messageData[2]);
-                    if (messageData.length == 4) terminated = true;
                     localAppsMap.put(localAppSqs, new HashSet<>());
                     startLocalAppRequest(inputFileKey, localAppSqs, n);
                     sqsAdapter.deleteMessage(messages, Main.programSqsUrl);
+                    if (messageData.length == 4) terminated = true;
                 }
             }
 
+
             List<Message> workersMessages = sqsAdapter.retrieveMessage(workersOutputQueueUrl, 10, 1);
             for (Message message : workersMessages) {
-                //add implementation
                 handleWorkerMessage(message);
             }
             sqsAdapter.deleteMessage(workersMessages, workersOutputQueueUrl);
 
 
             for (Map.Entry<String, HashSet<String>> localApp : localAppsMap.entrySet()) {
-                if (localApp.getValue().size() == approxWorkCount.get(localApp.getKey())) {
+                if (approxWorkCount.containsKey(localApp.getKey()) && (localApp.getValue().size() == approxWorkCount.get(localApp.getKey()).size())) {
+                    System.out.println("summarizing");
                     summarizeWork(localApp);
                     localAppsMap.remove(localApp.getKey());
                     approxWorkCount.remove(localApp.getKey());
+                } else {
+                    printHelp += 1;
+                    if (printHelp == 50) {
+                        printHelp = 0;
+                        System.out.println("files done: " + localApp.getValue().size() + " expected: " + approxWorkCount.get(localApp.getKey()).size());
+                    }
                 }
             }
 
-            if (terminated && approxWorkCount.isEmpty()) {
-                //terminate();
+            if (terminated && localAppsMap.isEmpty()) {
+                terminate();
                 break;
             }
         }
     }
+
 
     private static void summarizeWork(Map.Entry<String, HashSet<String>> localApp) {
         String summary = "";
         for (String line : localApp.getValue()) {
             summary += line + "\n";
         }
-        String key = String.format("summary-%s", "1");
+        String key = String.format("summary-%s", currentTimeMillis());
         try {
             s3Adapter.putFileInBucketFromBytes(Main.programBucketName, key, summary.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
@@ -124,23 +134,23 @@ public class ManagerMain {
     private static void startLocalAppRequest(String inputFileKey, String localAppSqs, int n) {
         BufferedReader buffer = s3Adapter.getObject(Main.programBucketName, inputFileKey);
         List<String> lines = buffer.lines().collect(Collectors.toList());
-        approxWorkCount.put(localAppSqs, lines.size());
-
+        HashSet<String> linesSet = new HashSet<>();
         for (String line : lines) {
             String[] data = line.split("\t");
             String url = data[1];
             String action = data[0];
             String message = url + "," + action + "," + localAppSqs;
+            linesSet.add(line);
             sqsAdapter.sendMessage(workersInputQueueUrl, message);
         }
+        approxWorkCount.put(localAppSqs, linesSet);
 
         //create workers
         List<Instance> openInstances = ec2Adapter.describeEC2Instances().stream().filter(i -> i.state().code().intValue() != 43).collect(Collectors.toList());
         int maxNumberOfWorkers = 10 - openInstances.size();
         for (int i = 0; i < Math.min(maxNumberOfWorkers, Math.ceil(lines.size() / n)); i++) {
-            System.out.println(workersInputQueueUrl + " " + workersOutputQueueUrl + " " + Main.programBucketName);
             String userData = getRunShellCommands(workersInputQueueUrl, workersOutputQueueUrl, Main.programBucketName);
-            String workerId = ec2Adapter.createEC2Instance(String.format("worker-%s", i), userData);
+            String workerId = ec2Adapter.createEC2Instance(String.format("worker-%s", i), userData, InstanceType.T2_MICRO);
             workers.add(workerId);
         }
     }

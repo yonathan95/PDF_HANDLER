@@ -4,6 +4,7 @@ import adapters.EC2Adapter;
 import adapters.S3Adapter;
 import adapters.SQSAdapter;
 import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceType;
 import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 
@@ -15,9 +16,9 @@ import java.util.stream.Collectors;
 
 
 public class Main {
-    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYE5PEXOGQ";
-    public static final String AWS_SECRET_ACCESS_KEY = "hCdxaE5HlkT9K0OkS8zmK4/Q2OFIy/1mAtNKIwg1";
-    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEHkaDCEW7UUbIjEjBdbuICLIAQC250eG8GOSM9kwqdqUZF7aTaYQ9iGjsz1DPu5E/4TkU8cGOsxUobhQ2otg5KkjoV38LTFHSuh5lZLxcF7YpPoOFEuHhh5X4agj9RqMGh7hlh2cEp0Tf7WqBzVyaXL+bEZ4q8vPYvxQ4ofx8UZwiUu7bFM8ggUiil6avfDZQjO1KHf2LJgbknTVK9gY4liKnE75SWOGXgmkR6QkHwsDsZuzyVWUENEvOJLCRJHBnqnruj+hOZlYKbn0oTP/7TQdwVo11DOFcueqKPqGp40GMi3OMyIOSlITectKlEd816aFcYQ75mX4OWxhkEYUQsUvlhV7GYtdeBzSHgeLLvA=";
+    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYBNNINVM5";
+    public static final String AWS_SECRET_ACCESS_KEY = "4XsqmWw24CYTG1CLZpsMjVzqm7XjrABEaOBdzCXb";
+    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEJD//////////wEaDGFtFa0UudJIzdQz3yLIAbNmjRU/9jhL86BnDA/+75FfAvlNmJyUAOBc2c+26AODnslDZ/8eCRHQZxAtXcHmzAG7WAsqFnhrBLbvCyj0ah/CH/rdSbHfFYfcguCUtQfNlC0KS17vxl9vdkrlGscP5STTN74K2CxNAvRf/2X6AphCk2izAWKjSOMcTRLsc2Hy1gL9m1kl4JgCOI9xXAnX5RkXuAugMe9zX1h5cqrcQC7NMwLspjwC1HBJbhXaU7m/YPqne8G8iuOcpPTqZdfFqewbqDYZIb5VKNujrI0GMi1cfEvCe6BDn6jiD0Vy3dE+MtEWX5seGxdbxkketfx/9o9XiXYF/pD+7pOPBA8=";
     public static final String programSqsUrl = "https://sqs.us-east-1.amazonaws.com/826355905904/program-queue";
     public static final String programBucketName = "program-bucket-28031995";
     private static final Integer RUNNING = 16;
@@ -64,7 +65,7 @@ public class Main {
         while (!finished) {
             List<Message> messages = sqsAdapter.retrieveMessage(queueUrl, 1, 20);
             StringBuilder summary = new StringBuilder();
-            summary.append("<dif><p>");
+            summary.append("<html>");
             if (!messages.isEmpty()) {
                 BufferedReader buffer = s3Adapter.getObject(Main.programBucketName, messages.get(0).body());
                 List<String> lines = buffer.lines().collect(Collectors.toList());
@@ -72,10 +73,11 @@ public class Main {
                 try {
                     BufferedWriter bw = new BufferedWriter(new FileWriter(outputFile));
                     for (String line : lines) {
-                        summary.append(line);
+                        summary.append("<dif><p>" + line + "</p></dif>");
                     }
-                    summary.append("</p></dif>");
+                    summary.append("</html>");
                     bw.write(summary.toString());
+                    bw.close();
                     finished = true;
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -92,7 +94,7 @@ public class Main {
 
     private static void initiateManagerInstance() {
         String userData = getRunShellCommands();
-        ec2Adapter.createEC2Instance(MANAGER_NODE_NAME, userData);
+        ec2Adapter.createEC2Instance(MANAGER_NODE_NAME, userData, InstanceType.T3_MEDIUM);
     }
 
     private static String getRunShellCommands() {

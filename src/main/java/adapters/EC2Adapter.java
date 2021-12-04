@@ -17,7 +17,7 @@ public class EC2Adapter {
         ec2 = Ec2Client.builder().credentialsProvider(DefaultCredentialsProvider.create()).build();
     }
 
-    public String createEC2Instance(String name, String userData) {
+    public String createEC2Instance(String name, String userData, InstanceType instanceType) {
 
 
         String amiId = "ami-04ad2567c9e3d7893";
@@ -26,7 +26,7 @@ public class EC2Adapter {
 
         RunInstancesRequest runRequest = RunInstancesRequest.builder()
                 .imageId(amiId)
-                .instanceType(InstanceType.T2_MICRO)
+                .instanceType(instanceType)
                 .maxCount(1)
                 .minCount(1)
                 .userData(userData)
