@@ -16,9 +16,9 @@ import java.util.stream.Collectors;
 
 
 public class Main {
-    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYKKXXYKSD";
-    public static final String AWS_SECRET_ACCESS_KEY = "YlpcR+I5JlSJJtrOrzkrBXmK0YsT50Bj9mtnjqQc";
-    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEJT//////////wEaDEE2frqwpk5HNrh3GSLIAWWl1qDuqv4Wid+e45WHUKk9rQ7ASpqaMbg0emNOJbhk3zGFyw+7YLjvdPKNIMg7kXr2isrvCskbY5c7H8Y+k/tthHC0Oxs2MyB/aA+y0SRVLe+hc2q6J2L2Lme1j/MR5TzcR9Pt4BDnR5Y52GfRrrOuE5tYAIrFFt+W46etkgubmi+NIKPhVnzoUQ/pgJsiM1oY+xpw+aPNZL+M6R2eH4IM6NrFLKgkWNkcLFzXhuff+saJhUGSjgR4Ec0Gg7mKFycilAcYRzy4KLiVrY0GMi2BleY4wCa+4bMTNWaMQbDf9kifSo8VdAFEVlVupSxYVi//Wm0Crmp0YrrUyfk=";
+    public static final String AWS_ACCESS_KEY_ID = "ASIA4AZVGOVYLWUBJQTH";
+    public static final String AWS_SECRET_ACCESS_KEY = "7LyYGN+eN2fzDubHjnXzyQxkJWZOFG3BXlZaPQbc";
+    public static final String AWS_SESSION_TOKEN = "FwoGZXIvYXdzEKn//////////wEaDHuRUQMhMKt3C3F0DiLIAWxu4D3i9U+0AvevcmD+L3nyAXgskdU+bBgStsFKGIN0ys+MDGZIcT6xzSjghBQvtLqm9kj5GahGA3W00YWadGnO2ZtgZJY50Od0eeem8hiUVcsZ6wImgym0GzaK98FrP8Fp0cHz1jw6NsrpkaCvQYqC4OcDGzfyqORMwHqyxlOPPKx3gsOUInvzbcsGm+Rvt/y/tTwGCZE0KYQK8n3LznU4Jlm3O1kEm3RxQNIO9YuQfS3EpV2y/InN8nfijFr/yG9ldh1gygOvKJbfsY0GMi31sSk+lB7q7srmGAyKJ+K6+qoew+cpPN4DWDaZDh4qzcdLOlZV4uNQMW+6TwQ=";
     public static final String programSqsUrl = "https://sqs.us-east-1.amazonaws.com/826355905904/program-queue";
     public static final String programBucketName = "program-bucket-28031995";
     public static final Integer RUNNING = 16;

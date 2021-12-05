@@ -20,7 +20,7 @@ public class ManagerMain {
     private static final EC2Adapter ec2Adapter = new EC2Adapter();
     private static final S3Adapter s3Adapter = new S3Adapter();
     private static final SQSAdapter sqsAdapter = new SQSAdapter();
-    private static final HashMap<String, HashSet<String>> approxWorkCount = new HashMap<>();
+    private static final HashMap<String, Integer> approxWorkCount = new HashMap<>();
     private static final HashMap<String, HashSet<String>> localAppsMap = new HashMap<>();
     private static final List<String> workers = new ArrayList<>();
     private static String workersInputQueueUrl;
@@ -61,7 +61,7 @@ public class ManagerMain {
 
 
             for (Map.Entry<String, HashSet<String>> localApp : localAppsMap.entrySet()) {
-                if (approxWorkCount.containsKey(localApp.getKey()) && (localApp.getValue().size() == approxWorkCount.get(localApp.getKey()).size())) {
+                if (approxWorkCount.containsKey(localApp.getKey()) && (localApp.getValue().size() == approxWorkCount.get(localApp.getKey()))) {
                     summarizeWork(localApp);
                     toRemove.add(localApp.getKey());
                 }
@@ -104,19 +104,24 @@ public class ManagerMain {
 
     private static void handleWorkerMessage(Message message) {
         String[] workerMessageData = message.body().split(",");
+        String localAppUrl;
+        String origUrl;
+        String reason;
+        String action;
         if ("success".equals(workerMessageData[4])) {
-            String origUrl = workerMessageData[0];
+            origUrl = workerMessageData[0];
             String key = workerMessageData[1];
-            String localAppUrl = workerMessageData[2];
-            String action = workerMessageData[3];
-            String newUrl = String.format("https://%s.s3.us-west-2.amazonaws.com/%s", Main.programBucketName, key);
-            localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + newUrl + "\n");
+            localAppUrl = workerMessageData[2];
+            action = workerMessageData[3];
+            reason = String.format("https://%s.s3.us-west-2.amazonaws.com/%s", Main.programBucketName, key);
         } else {
-            String action = workerMessageData[0];
-            String origUrl = workerMessageData[1];
-            String whyFail = workerMessageData[2];
-            String localAppUrl = workerMessageData[3];
-            localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + whyFail + "\n");
+            action = workerMessageData[0];
+            origUrl = workerMessageData[1];
+            reason = workerMessageData[2];
+            localAppUrl = workerMessageData[3];
+        }
+        if (localAppsMap.containsKey(localAppUrl)) {
+            localAppsMap.get(localAppUrl).add(action + "\t" + origUrl + "\t" + reason + "\n");
         }
     }
 
@@ -141,11 +146,11 @@ public class ManagerMain {
             linesSet.add(line);
             sqsAdapter.sendMessage(workersInputQueueUrl, message);
         }
-        approxWorkCount.put(localAppSqs, linesSet);
+        approxWorkCount.put(localAppSqs, linesSet.size());
 
         //create workers
         List<Instance> openInstances = ec2Adapter.describeEC2Instances().stream().filter(i -> i.state().code() != 48).collect(Collectors.toList());
-        int maxNumberOfWorkers = 10 - openInstances.size();
+        int maxNumberOfWorkers = 9 - openInstances.size();
         for (int i = 0; i < Math.min(maxNumberOfWorkers, Math.ceil(lines.size() / n)); i++) {
             String userData = getRunShellCommands(workersInputQueueUrl, workersOutputQueueUrl);
             String workerId = ec2Adapter.createEC2Instance(String.format("worker-%s", i), userData, InstanceType.T2_MICRO);
